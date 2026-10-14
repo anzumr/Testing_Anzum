@@ -42,9 +42,17 @@ const CONFIG = {
   var hero = document.getElementById("home");
   var brandLogo = document.querySelector(".brand-logo");
   var breakTimer = 0;
+  var heroBroken = false; // the headline sheen plays once per visit, even if the background is re-mounted
+
+  // Visitor's pause choice (WCAG 2.2.2): stops the hero water and every looping CSS animation.
+  var MOTION_KEY = "waveDigital.motion";
+  var motionPaused = false;
+  try { motionPaused = window.localStorage.getItem(MOTION_KEY) === "paused"; } catch (err) { /* storage unavailable */ }
 
   function onBreak() {
-    if (reducedMotion() || !hero) return;
+    var first = !heroBroken;
+    heroBroken = true;
+    if (!first || motionPaused || reducedMotion() || !hero) return;
     hero.classList.remove("is-breaking");
     if (brandLogo) brandLogo.classList.remove("pulse");
     void hero.offsetWidth; // restart the CSS animations
@@ -57,16 +65,43 @@ const CONFIG = {
     }, 2000);
   }
 
-  if (hero && window.WaveBackground) {
+  var bg = null;
+  function mountBackground(replay) {
+    if (!hero || !window.WaveBackground) return;
+    var opts = {
+      logo: hero.querySelector(".hero-art"),
+      textEl: hero.querySelector(".hero-inner"),
+      onBreak: onBreak
+    };
+    if (motionPaused) opts.reducedMotion = true; // a composed still frame, whole logo
+    if (!replay) opts.intro = false;              // resuming: no second tide-in
     try {
-      window.WaveBackground.mount(hero.querySelector(".wave-canvas"), {
-        logo: hero.querySelector(".hero-art"),
-        textEl: hero.querySelector(".hero-inner"),
-        onBreak: onBreak
-      });
+      bg = window.WaveBackground.mount(hero.querySelector(".wave-canvas"), opts);
     } catch (err) {
-      /* the static CSS backdrop and logo remain */
+      bg = null; /* the static CSS backdrop and logo remain */
     }
+  }
+
+  var motionToggle = document.getElementById("motionToggle");
+  var motionLabel = motionToggle ? motionToggle.querySelector(".motion-label") : null;
+  function applyMotionState() {
+    document.documentElement.classList.toggle("motion-paused", motionPaused);
+    if (!motionToggle) return;
+    motionToggle.classList.toggle("is-paused", motionPaused);
+    if (motionLabel) motionLabel.textContent = motionPaused ? "Play animation" : "Pause animation";
+  }
+  applyMotionState();
+  mountBackground(true);
+
+  if (motionToggle) {
+    motionToggle.hidden = false;
+    motionToggle.addEventListener("click", function () {
+      motionPaused = !motionPaused;
+      try { window.localStorage.setItem(MOTION_KEY, motionPaused ? "paused" : "playing"); } catch (err) { /* storage unavailable */ }
+      applyMotionState();
+      if (bg) { try { bg.destroy(); } catch (err) { /* ignore */ } bg = null; }
+      mountBackground(false);
+    });
   }
 
   /* ------------------------------------------------------------------
@@ -105,6 +140,10 @@ const CONFIG = {
       if (isMenuOpen() && !menu.contains(e.target) && !menuButton.contains(e.target)) closeMenu();
     });
     window.addEventListener("resize", function () { if (window.innerWidth > NAV_BREAKPOINT) closeMenu(); }, { passive: true });
+    // keyboard focus leaving the open menu closes it, so the menu never hides the focused control
+    document.addEventListener("focusin", function (e) {
+      if (isMenuOpen() && !menu.contains(e.target) && !menuButton.contains(e.target)) closeMenu();
+    });
   }
 
   if (header) {
@@ -122,7 +161,7 @@ const CONFIG = {
       var rect = logo.getBoundingClientRect();
       logo.style.setProperty("--ripple-x", (e.clientX - rect.left) + "px");
       logo.style.setProperty("--ripple-y", (e.clientY - rect.top) + "px");
-      if (reducedMotion()) return;
+      if (reducedMotion() || motionPaused) return;
       var now = Date.now();
       if (now - last < 650) return;
       last = now;
@@ -189,6 +228,7 @@ const CONFIG = {
      Payments — never collect card details on this static website
      ------------------------------------------------------------------ */
   var contact = document.getElementById("contact");
+  var contactTitle = document.getElementById("contact-title");
   var serviceSelect = document.getElementById("service");
   // pre-select the matching service in the contact form when checkout isn't set up yet
   var PAYMENT_SERVICE = {
@@ -207,6 +247,8 @@ const CONFIG = {
         showToast("Online checkout is being set up. Please contact us to arrange payment for this service.");
         if (serviceSelect && PAYMENT_SERVICE[key]) serviceSelect.value = PAYMENT_SERVICE[key];
         if (contact) contact.scrollIntoView({ behavior: scrollBehavior() });
+        // move keyboard / screen-reader focus along with the page (the heading, so no on-screen keyboard pops up)
+        if (contactTitle) { try { contactTitle.focus({ preventScroll: true }); } catch (err) { contactTitle.focus(); } }
         return;
       }
       var safe = safeHttpsUrl(url);
@@ -261,12 +303,15 @@ const CONFIG = {
     if (state && text) formMessage.setAttribute("data-state", state);
     else formMessage.removeAttribute("data-state");
   }
-  function setSending(sending) {
+  // The button is never `disabled` while sending: that would drop keyboard focus to <body>.
+  var sending = false;
+  function setSending(on) {
+    sending = on;
     if (!submit) return;
-    submit.disabled = sending;
-    submit.classList.toggle("is-sending", sending);
-    submit.setAttribute("aria-busy", String(sending));
-    if (submitLabel) submitLabel.textContent = sending ? "Sending…" : "Send Inquiry";
+    submit.setAttribute("aria-disabled", String(on));
+    submit.classList.toggle("is-sending", on);
+    submit.setAttribute("aria-busy", String(on));
+    if (submitLabel) submitLabel.textContent = on ? "Sending…" : "Send Inquiry";
   }
 
   if (form) {
@@ -285,6 +330,7 @@ const CONFIG = {
 
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
+      if (sending) return;
       if (!form.reportValidity()) return;
       if (!CONFIG.formspreeEndpoint) {
         setMessage("The contact form is not connected yet. Please configure the Formspree endpoint before accepting inquiries.", "info");

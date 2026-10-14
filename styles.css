@@ -31,10 +31,10 @@ h1,h2,h3,h4{margin:0}
 .skip-link{position:absolute;left:16px;top:12px;z-index:100;background:var(--cyan);color:#062335;font-weight:700;font-size:14px;padding:12px 18px;border-radius:10px;transform:translateY(-160%);transition:transform .2s}
 .skip-link:focus{transform:none}
 :focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
-main:focus{outline:none}
+main:focus,h2[tabindex="-1"]:focus{outline:none}
 
 /* ---------- shared type ---------- */
-.eyebrow{display:flex;align-items:flex-start;gap:12px;line-height:18px;color:var(--cyan);font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;margin:0}
+.eyebrow{display:flex;align-items:flex-start;gap:12px;line-height:18px;text-wrap:balance;color:var(--cyan);font-size:12px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;margin:0}
 .eyebrow::before{content:"";flex:none;width:26px;height:10px;margin-top:4px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 10'%3E%3Cpath d='M1.5 6.5c2.6-3.6 5.4-3.6 7.6 0s5 3.6 7.6 0 5-3.6 7.6 0' fill='none' stroke='%2370e5f2' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center/contain}
 h2{font:800 clamp(34px,4.1vw,55px)/1.14 Manrope,sans-serif;letter-spacing:-.045em;margin:16px 0 22px;text-wrap:balance}
 h2 em,.hero em{font-style:normal;color:var(--cyan)}
@@ -52,7 +52,7 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
   .btn.ghost:hover{background:rgba(112,229,242,.12);border-color:#8beef7}
 }
 .btn:active{transform:translateY(-1px)}
-.btn:disabled{cursor:progress;opacity:.8;transform:none}
+.btn:disabled,.btn[aria-disabled="true"]{cursor:progress;opacity:.8;transform:none}
 
 /* ---------- header ---------- */
 .header{position:sticky;top:0;z-index:30;background:rgba(3,13,25,.84);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08);transition:background-color .3s,box-shadow .3s}
@@ -66,11 +66,13 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .brand-logo::before,.footer-logo::before{content:"";position:absolute;inset:-8px;background:radial-gradient(ellipse,rgba(34,211,238,.3),transparent 70%);filter:blur(12px);z-index:-1;transition:opacity .4s,transform .4s}
 .brand-logo::after,.footer-logo::after{content:"";position:absolute;left:var(--ripple-x,50%);top:var(--ripple-y,50%);width:16px;height:16px;border:2px solid #c4f8ff;border-radius:50%;opacity:0;pointer-events:none;transform:translate(-50%,-50%)}
 .brand-logo.rippling::after,.footer-logo.rippling::after{animation:ripple .8s ease-out}
-.brand-logo img,.footer-logo img{height:52px;width:auto;object-fit:contain;animation:shimmer 4s ease-in-out infinite;transition:transform .25s var(--ease)}
+.brand-logo img,.footer-logo img{height:52px;width:auto;object-fit:contain;filter:drop-shadow(0 0 8px #35c5e066);transition:transform .25s var(--ease)}
 .footer-logo img{height:44px}
 .brand:hover .brand-logo img,.brand:hover .footer-logo img{transform:scale(1.07)}
+/* the glow behind the logo breathes (opacity only, so it stays on the compositor) */
+.brand-logo::before,.footer-logo::before{animation:glowBreath 4s ease-in-out infinite}
 .brand-logo.pulse::before{animation:logoPulse 1.6s ease-out}
-@keyframes shimmer{0%,100%{filter:drop-shadow(0 0 6px #35c5e044)}50%{filter:drop-shadow(0 0 17px #35c5e0aa) brightness(1.08)}}
+@keyframes glowBreath{0%,100%{opacity:.45}50%{opacity:1}}
 @keyframes ripple{from{opacity:.85;transform:translate(-50%,-50%) scale(.7)}to{opacity:0;transform:translate(-50%,-50%) scale(5)}}
 @keyframes logoPulse{0%{opacity:1;transform:scale(1)}35%{opacity:1;transform:scale(1.45)}100%{opacity:1;transform:scale(1)}}
 
@@ -91,19 +93,41 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
    HERO
    ========================================================================= */
 /* HERO-LAYOUT:BEGIN */
-/* Provisional hero layout (adapted from the Brand Ribbons demo) — owned by the background build. */
-.hero{position:relative;min-height:min(850px,95vh);display:flex;align-items:center;overflow:hidden;
-  background:radial-gradient(ellipse at 60% 30%,#19506a 0%,#06243a 42%,#020b15 82%)}
+/* Hero box + background layers (owned by wave-bg.js). The canvas paints the sky, water, spray
+   and a readability scrim; this backdrop is the original hero gradient (plus a faint sea glow)
+   and is what shows before the first frame and if every renderer is unavailable. */
+.hero{--art-w:clamp(240px,30vw,450px);position:relative;display:flex;align-items:center;overflow:hidden;isolation:isolate;
+  /* fill the first screen below the sticky header (header + its 1px border), so the scroll cue is never cut off */
+  min-height:min(850px,calc(100vh - var(--header-h) - 1px));min-height:min(850px,calc(100svh - var(--header-h) - 1px));
+  background-color:#020b15;
+  background-image:radial-gradient(130% 34% at 70% 106%,rgba(18,168,236,.3),rgba(8,97,132,.12) 55%,transparent 80%),
+    radial-gradient(ellipse at 60% 30%,#19506a 0%,#06243a 42%,#020b15 82%)}
 .wave-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;z-index:0}
-.hero-art{--w:clamp(240px,31vw,460px);position:absolute;z-index:1;pointer-events:none;width:var(--w);aspect-ratio:752/668;
-  right:calc((100% - min(1160px,100% - 40px)) / 2 - 10px);top:calc(70% - var(--w) * .888 * .78)}
-.hero-art img{width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+/* The official logo, whole: wave-bg.js lifts it out of the water and lets it ride the swell
+   (transform), and may clip at most its bottom ~10% at the live waterline. No CSS filter or mask. */
+.hero-art{position:absolute;z-index:1;pointer-events:none;width:var(--art-w);aspect-ratio:752/668;
+  right:calc((100% - min(1160px,100% - 40px)) / 2 - 6px);top:calc(72% - var(--art-w) * .8883 * .905)}
+.hero-art img{display:block;width:100%;height:100%;max-width:none;object-fit:contain;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 .hero-inner{position:relative;z-index:2;padding:105px 0 150px}
-@media(max-width:900px) and (min-width:761px){.hero-art{--w:clamp(200px,27vw,260px)}}
+/* very wide screens: the mark drifts out into the open sky instead of crowding the headline */
+@media(min-width:1600px){
+  .hero-art{right:calc((100% - 1160px) / 2 - clamp(0px,(100vw - 1600px) / 4,160px))}
+}
+/* short desktop/laptop windows: trim the reserved space under the copy */
+@media(min-width:761px) and (max-height:820px){
+  .hero-inner{padding-bottom:96px}
+}
+@media(max-width:1050px) and (min-width:761px){
+  .hero{--art-w:clamp(200px,29vw,300px)}
+  .hero-art{top:calc(80% - var(--art-w) * .8883 * .905)}
+}
 @media(max-width:760px){
-  .hero{min-height:max(690px,min(100svh - 76px,860px));align-items:flex-start}
-  .hero-inner{padding:64px 0 230px}
-  .hero-art{--w:clamp(132px,42vw,180px);right:14px;top:calc(88.5% - var(--w) * .888 * .78)}
+  /* the logo surfaces bottom-right, under the buttons, in its own band of water;
+     sized to the first screen so the mark and its waterline show on short phones too */
+  .hero{--art-w:clamp(150px,min(48vw,26vh),210px);--art-w:clamp(150px,min(48vw,26svh),210px);
+    min-height:max(560px,min(100vh - 76px,800px));min-height:max(560px,min(100svh - 76px,800px));align-items:flex-start}
+  .hero-inner{padding:clamp(24px,5vh,56px) 0 calc(var(--art-w) * .8883 + 84px);padding-top:clamp(24px,5svh,56px)}
+  .hero-art{right:12px;top:auto;bottom:64px}
 }
 /* HERO-LAYOUT:END */
 
@@ -113,7 +137,37 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .hero-inner>p:not(.eyebrow){max-width:560px;color:#d0e3ed;font-size:18px;line-height:1.8;margin:0;text-shadow:0 1px 14px rgba(2,11,21,.45)}
 .actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px}
 .hero .btn.ghost{background:rgba(3,13,25,.35)}
+@media (hover:hover){.hero .btn.ghost:hover{background:rgba(112,229,242,.14)}}
 .scroll-cue{position:absolute;z-index:2;bottom:18px;left:0;right:0;margin:auto;width:max-content;font-size:10px;letter-spacing:.22em;color:#c1e2ed;white-space:nowrap;pointer-events:none;padding:7px 12px 7px 15px;border-radius:99px;background:rgba(3,13,25,.6);border:1px solid rgba(112,229,242,.16)}
+
+/* pause / play control for every looping animation on the page (WCAG 2.2.2) */
+/* the visible pill matches the scroll cue (31px); ::before stretches the tap target to 44px */
+.motion-toggle{position:absolute;z-index:2;left:max(20px,(100% - 1160px) / 2);bottom:18px;display:inline-flex;align-items:center;justify-content:center;gap:9px;min-width:44px;height:31px;padding:0 15px 0 12px;border-radius:99px;background:rgba(3,13,25,.6);border:1px solid rgba(112,229,242,.16);color:#c1e2ed;font-size:10.5px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;white-space:nowrap;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:border-color .25s,color .25s,background-color .25s}
+.motion-toggle::before{content:"";position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+.motion-toggle[hidden]{display:none}
+.motion-icon{flex:none;width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.motion-icon .i-play{display:none;fill:currentColor;stroke-width:1.6}
+.motion-toggle.is-paused .i-pause{display:none}
+.motion-toggle.is-paused .i-play{display:inline}
+@media (hover:hover){.motion-toggle:hover{color:#fff;border-color:rgba(112,229,242,.6);background:rgba(3,13,25,.8)}}
+@media(max-width:760px){
+  /* icon only on phones, so it never runs into the centred scroll cue; the name stays for screen readers */
+  .motion-toggle{left:16px;padding:0;width:31px;min-width:0}
+  .motion-toggle::before{left:50%;width:44px;transform:translate(-50%,-50%)}
+  .motion-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+}
+@media (prefers-reduced-motion:reduce){.motion-toggle{display:none!important}}
+/* paused: looping decoration stops (one-shot entrance animations are skipped, never frozen mid-way) */
+.motion-paused .wave-divider::before,.motion-paused .wave-divider::after,.motion-paused .price-card.featured,
+.motion-paused .brand-logo::before,.motion-paused .footer-logo::before{animation-play-state:paused!important}
+.motion-paused .scroll-cue,.motion-paused .hero-inner>*{animation:none!important}
+
+/* short phones: tighten the copy so the logo and its water stay in the first screen */
+@media(max-width:760px) and (max-height:760px){
+  .hero .hero-inner>h1{margin:14px 0;font-size:clamp(36px,10vw,60px)}
+  .hero-inner>p:not(.eyebrow){line-height:1.6}
+  .hero .actions{margin-top:20px}
+}
 
 /* headline sheen, triggered by the wave break (onBreak) */
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
@@ -221,20 +275,6 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .project-arrow{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;border:1px solid rgba(112,229,242,.3);font-size:20px;color:var(--cyan);transition:transform .35s var(--ease),background-color .35s,color .35s}
 @media (hover:hover){.project:hover .project-arrow{background:var(--cyan);color:#062335;transform:translate(2px,-2px)}}
 
-/* call-to-action tile (not a client) */
-.project-cta{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:space-between;gap:28px;min-height:196px;padding:34px 40px;border:1.5px dashed rgba(112,229,242,.45);background:radial-gradient(ellipse 55% 120% at 82% 50%,rgba(18,168,236,.16),transparent 70%),linear-gradient(120deg,#071a2b,#08233a)}
-.project-cta .cta-body{position:relative;z-index:1;max-width:620px}
-.project-cta h3{font:800 clamp(26px,2.8vw,36px)/1.15 Manrope,sans-serif;letter-spacing:-.035em;margin:14px 0 10px}
-.project-cta .cta-line{margin:0;color:var(--muted);font-size:15px;line-height:1.7}
-.cta-mark{position:absolute;right:13%;top:50%;width:300px;height:auto;transform:translateY(-50%) rotate(-8deg);opacity:.08;pointer-events:none;transition:opacity .5s,transform 1.2s var(--ease)}
-.cta-go{position:relative;z-index:1;flex:none;display:grid;place-items:center;width:64px;height:64px;border-radius:50%;border:1px solid rgba(112,229,242,.55);background:rgba(112,229,242,.06);box-shadow:0 0 0 6px rgba(112,229,242,.04);transition:background-color .35s,transform .35s var(--ease),box-shadow .35s}
-.cta-go svg{width:24px;height:24px;fill:none;stroke:var(--cyan);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .35s}
-@media (hover:hover){
-  .project-cta:hover{border-style:solid;border-color:var(--cyan);box-shadow:0 0 0 1px rgba(112,229,242,.25),0 26px 60px -26px rgba(18,168,236,.6)}
-  .project-cta:hover .cta-mark{opacity:.14;transform:translateY(-50%) rotate(-4deg) scale(1.04)}
-  .project-cta:hover .cta-go{background:var(--cyan);transform:translateX(4px);box-shadow:0 0 0 8px rgba(112,229,242,.1)}
-  .project-cta:hover .cta-go svg{stroke:#062335}
-}
 
 /* ---------- services ---------- */
 .service-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px;margin-top:42px}
@@ -256,7 +296,7 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .price-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 .price-grid.yearly{grid-template-columns:repeat(2,minmax(0,1fr))}
 .price-grid.onetime{grid-template-columns:repeat(3,minmax(0,1fr))}
-.price-card{display:flex;flex-direction:column;min-width:0;padding:26px 24px 24px}
+.price-card{display:flex;flex-direction:column;min-width:0;padding:30px 24px 24px}
 .price-card h4{font-size:17px;font-weight:700;margin:4px 0 18px}
 .price{font:800 clamp(30px,2.9vw,40px)/1.05 Manrope,sans-serif;letter-spacing:-.035em;white-space:nowrap;color:#fff}
 .price small{font:500 13px 'DM Sans',sans-serif;letter-spacing:0;color:var(--muted);margin-left:3px}
@@ -270,7 +310,8 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .price-card.featured{border-color:#70e5f2;background:radial-gradient(ellipse 90% 60% at 50% 0%,rgba(112,229,242,.14),transparent 70%),linear-gradient(180deg,#0d3a4c,#0a2b3c);box-shadow:0 0 0 1px rgba(112,229,242,.18),0 0 34px -6px rgba(112,229,242,.22)}
 .price-card.featured .price{color:#fff}
 .price-card.featured .price-note,.price-card.featured .price small{color:#bcd6e2}
-.popular{align-self:flex-start;font-size:10px;font-weight:800;letter-spacing:.08em;color:#051c2b;background:var(--cyan);padding:7px 10px;border-radius:8px;margin-bottom:14px;box-shadow:0 6px 18px -6px rgba(112,229,242,.7)}
+/* the badge hangs from the top edge like a tab, so plan names and prices line up across each row */
+.popular{position:absolute;top:0;left:24px;margin:0;font-size:10px;line-height:1.2;font-weight:800;letter-spacing:.08em;color:#051c2b;background:var(--cyan);padding:5px 10px;border-radius:0 0 8px 8px;box-shadow:0 6px 18px -6px rgba(112,229,242,.7)}
 @media (prefers-reduced-motion:no-preference){
   .price-card.featured{animation:featuredGlow 5s ease-in-out infinite;animation-play-state:paused}
   .price-card.featured.in-view{animation-play-state:running}
@@ -290,11 +331,10 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .contact-form{display:grid;gap:16px;border:1px solid var(--line);border-radius:var(--radius);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));padding:30px;box-shadow:0 30px 60px -40px rgba(0,0,0,.8)}
 .field{display:grid;gap:8px}
 .contact-form label{font-size:13px;font-weight:500;color:#c2d7e3}
-.req{color:var(--cyan);margin-left:2px}
-.contact-form input,.contact-form select,.contact-form textarea{background:#061827;color:#fff;border:1px solid #315169;border-radius:12px;padding:13px 14px;width:100%;min-height:48px;outline:none;transition:border-color .2s,box-shadow .2s,background-color .2s}
+.contact-form input,.contact-form select,.contact-form textarea{background:#061827;color:#fff;border:1px solid #43708e;border-radius:12px;padding:13px 14px;width:100%;min-height:48px;outline:none;transition:border-color .2s,box-shadow .2s,background-color .2s}
 .contact-form textarea{resize:vertical;min-height:132px;line-height:1.6}
 .contact-form ::placeholder{color:#7f9cb0;opacity:1}
-.contact-form input:hover,.contact-form select:hover,.contact-form textarea:hover{border-color:#43708e}
+.contact-form input:hover,.contact-form select:hover,.contact-form textarea:hover{border-color:#56819e}
 .contact-form input:focus,.contact-form select:focus,.contact-form textarea:focus{border-color:var(--cyan);background:#07202f;box-shadow:0 0 0 3px rgba(112,229,242,.22)}
 .contact-form select{-webkit-appearance:none;appearance:none;padding-right:44px;cursor:pointer;
   background:#061827 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' fill='none' stroke='%2370e5f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 14px center/18px}
@@ -306,11 +346,12 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .form-message:empty{padding:0;border:0}
 .form-message::before{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font:800 12px/1 Manrope,sans-serif}
 .form-message[data-state="success"]{color:#c4f6dc;border-color:rgba(122,240,180,.4);background:rgba(122,240,180,.08)}
-.form-message[data-state="success"]::before{content:"✓";background:#7af0b4;color:#062335}
+/* the glyphs are decorative: the empty alternative text keeps them out of the announced status */
+.form-message[data-state="success"]::before{content:"✓";content:"✓" / "";background:#7af0b4;color:#062335}
 .form-message[data-state="error"]{color:#ffd0c8;border-color:rgba(255,157,144,.45);background:rgba(255,157,144,.08)}
-.form-message[data-state="error"]::before{content:"!";background:#ff9d90;color:#2a0d08}
+.form-message[data-state="error"]::before{content:"!";content:"!" / "";background:#ff9d90;color:#2a0d08}
 .form-message[data-state="info"]{color:#ffe7bd;border-color:rgba(255,212,140,.42);background:rgba(255,212,140,.07)}
-.form-message[data-state="info"]::before{content:"i";background:#ffd48c;color:#2a1a02}
+.form-message[data-state="info"]::before{content:"i";content:"i" / "";background:#ffd48c;color:#2a1a02}
 .form-message:empty::before{content:none}
 .btn.submit{margin-top:4px;width:100%}
 .btn.submit.is-sending .btn-arrow{display:none}
@@ -321,7 +362,7 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .site-footer{position:relative;padding:46px 0 40px;background:linear-gradient(180deg,#041322,#020b15)}
 .footer{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:28px}
 .footer-nav{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 22px;font-size:13.5px;color:#d6e7ed}
-.footer-nav a{display:inline-flex;align-items:center;min-height:44px;transition:color .2s}
+.footer-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;transition:color .2s}
 .footer-nav a:hover{color:var(--cyan)}
 .copyright{font-size:12px;color:var(--muted)}
 
@@ -333,8 +374,18 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .toast[data-tone="error"]{border-color:rgba(255,157,144,.5)}
 .toast[data-tone="error"] .toast-icon{background:rgba(255,157,144,.14);border-color:rgba(255,157,144,.55)}
 .toast[data-tone="error"] .toast-icon::before{content:"!";color:#ff9d90}
+/* the message stays rendered even when empty, so the live region is in the accessibility tree before it speaks */
 .toast-msg{margin:0;font-size:14px;line-height:1.5;color:#e6f6fc}
-.toast-msg:empty{display:none}
+/* phones: under the header, clear of the contact form the notice points to */
+@media(max-width:760px){
+  .toast{top:calc(var(--header-h) + 10px);bottom:auto;transform:translate(-50%,-18px)}
+  .toast.show{transform:translate(-50%,0)}
+}
+/* two-column contact layout: bottom-left, clear of the form column (and its Send button) */
+@media(min-width:901px){
+  .toast{left:24px;max-width:min(560px,calc(50% - 48px));transform:translateY(18px)}
+  .toast.show{transform:none}
+}
 .toast-close{flex:none;width:44px;height:44px;border-radius:12px;border:0;background:transparent;color:#c1e2ed;font-size:22px;line-height:1;display:grid;place-items:center}
 .toast-close[hidden]{display:none}
 .toast-close:hover{background:rgba(255,255,255,.07);color:#fff}
@@ -361,7 +412,9 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
   :root{--header-h:76px}
   .brand-logo img{height:46px}
   .menu-toggle{display:flex}
-  .links{display:none;position:absolute;left:0;right:0;top:100%;flex-direction:column;align-items:stretch;gap:2px;padding:12px 20px 22px;background:#061725;border-bottom:1px solid var(--line);box-shadow:0 30px 40px -20px rgba(0,0,0,.7);font-size:16px}
+  .links{display:none;position:absolute;left:0;right:0;top:100%;flex-direction:column;align-items:stretch;gap:2px;padding:12px 20px 22px;background:#061725;border-bottom:1px solid var(--line);box-shadow:0 30px 40px -20px rgba(0,0,0,.7);font-size:16px;
+    /* landscape phones: the open menu scrolls itself, so "Get Started" is always reachable */
+    max-height:calc(100vh - var(--header-h) - 1px);max-height:calc(100dvh - var(--header-h) - 1px);overflow-y:auto;overscroll-behavior:contain}
   .links.open{display:flex}
   .links a{padding:0 14px;min-height:50px;border-radius:12px}
   .links a:not(.nav-cta)::after{left:0;right:auto;top:14px;bottom:14px;width:3px;height:auto;transform:scaleY(0);transform-origin:center}
@@ -383,8 +436,6 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
   .section{padding:76px 0}
   .portfolio-grid,.service-grid,.price-grid,.price-grid.yearly,.price-grid.onetime{grid-template-columns:1fr}
   .project-visual{height:285px}
-  .project-cta{flex-direction:column;align-items:flex-start;padding:28px 24px;gap:22px}
-  .cta-mark{right:-4px;width:220px;top:auto;bottom:-40px;transform:rotate(-8deg)}
   .four{gap:10px}
   .pillar{padding:20px 17px 18px}
   .pillar-letter{font-size:42px}
@@ -396,6 +447,10 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 @media(max-width:480px){
   .wrap{width:calc(100% - 32px)}
   .actions .btn{flex:1 1 auto}
+  /* keep both hero buttons on one row on common phones (they wrap only when they truly cannot fit) */
+  .hero .actions{gap:10px}
+  .hero .actions .btn{padding:14px 14px}
+  .price-heading{flex-direction:column;align-items:flex-start;gap:10px}
   .btn.schedule{width:100%}
   .brand-text strong{font-size:15px;letter-spacing:.12em}
   .four{grid-template-columns:1fr 1fr}
@@ -405,7 +460,9 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 }
 @media(max-width:360px){
   .four{grid-template-columns:1fr}
-  .brand{gap:10px}
+  .brand{gap:10px;min-height:44px}
+  .footer-nav{gap:4px 10px;font-size:13px}
+  .btn.schedule{font-size:14px;padding:16px 14px}
   .brand-logo img{height:40px}
   .brand-text strong{font-size:14px;letter-spacing:.1em}
   .enso-ring{width:52%}
@@ -416,7 +473,7 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 @media (prefers-reduced-motion:reduce){
   html,html.smooth-scroll{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important;transition-delay:0s!important}
-  .brand-logo img,.footer-logo img,.wave-divider::before,.wave-divider::after,.scroll-cue{animation:none!important}
+  .brand-logo::before,.footer-logo::before,.wave-divider::before,.wave-divider::after,.scroll-cue{animation:none!important}
   .card:hover,.project:hover,.btn:hover{transform:none!important}
   .reveal{opacity:1;transform:none}
 }
