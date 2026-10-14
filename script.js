@@ -1,230 +1,400 @@
-// ============================================
-// WAVE Digital - Website Scripts
-// ============================================
+// SETUP: Replace the blank values with your real provider links.
+// Use hosted recurring-subscription links for monthly/yearly plans, not one-time checkout links.
+// bookingUrl: for Google Meet consultations, paste the booking-page link of a Google Calendar
+// appointment schedule (each booking gets its own Google Meet link). A Calendly link also works.
+const CONFIG = {
+  formspreeEndpoint: "",
+  bookingUrl: "",
+  payments: {
+    websiteMonthly: "",
+    socialMonthly: "",
+    adsMonthly: "",
+    bundleMonthly: "",
+    websiteYearly: "",
+    bundleYearly: "",
+    websiteSignup: "",
+    socialSetup: "",
+    logo: ""
+  }
+};
 
-document.addEventListener('DOMContentLoaded', () => {
+(function () {
+  "use strict";
 
-  // --- Navbar scroll behavior ---
-  const navbar = document.getElementById('navbar');
+  var NAV_BREAKPOINT = 900; // keep in sync with the 900px menu breakpoint in styles.css
+  var motionQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  function reducedMotion() { return !!(motionQuery && motionQuery.matches); }
+  function scrollBehavior() { return reducedMotion() ? "auto" : "smooth"; }
 
-  window.addEventListener('scroll', () => {
-    navbar.classList.toggle('scrolled', window.scrollY > 50);
+  // Only accept absolute https:// links; returns the normalised URL or null.
+  function safeHttpsUrl(value) {
+    try {
+      var parsed = new URL(value);
+      return parsed.protocol === "https:" ? parsed.href : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     Hero background (wave-bg.js) — mounted per the hero contract
+     ------------------------------------------------------------------ */
+  var hero = document.getElementById("home");
+  var brandLogo = document.querySelector(".brand-logo");
+  var breakTimer = 0;
+
+  function onBreak() {
+    if (reducedMotion() || !hero) return;
+    hero.classList.remove("is-breaking");
+    if (brandLogo) brandLogo.classList.remove("pulse");
+    void hero.offsetWidth; // restart the CSS animations
+    hero.classList.add("is-breaking");
+    if (brandLogo) brandLogo.classList.add("pulse");
+    clearTimeout(breakTimer);
+    breakTimer = setTimeout(function () {
+      hero.classList.remove("is-breaking");
+      if (brandLogo) brandLogo.classList.remove("pulse");
+    }, 2000);
+  }
+
+  if (hero && window.WaveBackground) {
+    try {
+      window.WaveBackground.mount(hero.querySelector(".wave-canvas"), {
+        logo: hero.querySelector(".hero-art"),
+        textEl: hero.querySelector(".hero-inner"),
+        onBreak: onBreak
+      });
+    } catch (err) {
+      /* the static CSS backdrop and logo remain */
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     Smooth scrolling for in-page links only (native anchor behaviour and
+     focus handling are kept; reduced motion jumps instantly)
+     ------------------------------------------------------------------ */
+  var smoothTimer = 0;
+  document.addEventListener("click", function (e) {
+    var link = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (!link || reducedMotion() || link.getAttribute("href").length < 2) return;
+    document.documentElement.classList.add("smooth-scroll");
+    clearTimeout(smoothTimer);
+    smoothTimer = setTimeout(function () { document.documentElement.classList.remove("smooth-scroll"); }, 2500);
+  }, true);
+
+  /* ------------------------------------------------------------------
+     Header: mobile menu + scrolled state
+     ------------------------------------------------------------------ */
+  var header = document.querySelector(".header");
+  var menuButton = document.getElementById("menuToggle");
+  var menu = document.getElementById("mobileMenu");
+
+  function isMenuOpen() { return menu.classList.contains("open"); }
+  function setMenu(open) {
+    menu.classList.toggle("open", open);
+    menuButton.classList.toggle("active", open);
+    menuButton.setAttribute("aria-expanded", String(open));
+    menuButton.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+  }
+  function closeMenu() { if (isMenuOpen()) setMenu(false); }
+
+  if (menuButton && menu) {
+    menuButton.addEventListener("click", function () { setMenu(!isMenuOpen()); });
+    menu.querySelectorAll("a").forEach(function (link) { link.addEventListener("click", closeMenu); });
+    document.addEventListener("click", function (e) {
+      if (isMenuOpen() && !menu.contains(e.target) && !menuButton.contains(e.target)) closeMenu();
+    });
+    window.addEventListener("resize", function () { if (window.innerWidth > NAV_BREAKPOINT) closeMenu(); }, { passive: true });
+  }
+
+  if (header) {
+    var onScroll = function () { header.classList.toggle("scrolled", window.scrollY > 8); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+
+  /* ------------------------------------------------------------------
+     Logo ripple follows the pointer
+     ------------------------------------------------------------------ */
+  document.querySelectorAll(".brand-logo,.footer-logo").forEach(function (logo) {
+    var last = 0;
+    logo.addEventListener("pointermove", function (e) {
+      var rect = logo.getBoundingClientRect();
+      logo.style.setProperty("--ripple-x", (e.clientX - rect.left) + "px");
+      logo.style.setProperty("--ripple-y", (e.clientY - rect.top) + "px");
+      if (reducedMotion()) return;
+      var now = Date.now();
+      if (now - last < 650) return;
+      last = now;
+      logo.classList.remove("rippling");
+      void logo.offsetWidth;
+      logo.classList.add("rippling");
+    });
+    logo.addEventListener("animationend", function (e) {
+      if (e.animationName === "ripple") logo.classList.remove("rippling");
+    });
   });
 
-  // --- Mobile nav toggle ---
-  const navToggle = document.getElementById('navToggle');
-  const navLinks = document.getElementById('navLinks');
+  /* ------------------------------------------------------------------
+     Toast (non-blocking, announced politely to screen readers)
+     ------------------------------------------------------------------ */
+  var toastBox = document.getElementById("toastBox");
+  var toastMsg = document.getElementById("toast");
+  var toastClose = document.getElementById("toastClose");
+  var toastTimer = 0, toastShowTimer = 0;
 
-  navToggle.addEventListener('click', () => {
-    navLinks.classList.toggle('active');
+  function hideToast() {
+    if (!toastBox) return;
+    clearTimeout(toastTimer);
+    toastBox.classList.remove("show");
+    if (toastClose) toastClose.hidden = true;
+    toastTimer = setTimeout(function () { toastMsg.textContent = ""; }, 400);
+  }
+  function scheduleHide(ms) {
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, ms);
+  }
+  function showToast(message, tone) {
+    if (!toastBox || !toastMsg) return;
+    clearTimeout(toastTimer);
+    clearTimeout(toastShowTimer);
+    toastBox.setAttribute("data-tone", tone || "info");
+    toastMsg.textContent = "";
+    // a short delay lets assistive tech register the change even for a repeated message
+    toastShowTimer = setTimeout(function () {
+      toastMsg.textContent = message;
+      toastBox.classList.add("show");
+      if (toastClose) toastClose.hidden = false;
+      scheduleHide(7000);
+    }, 60);
+  }
+  if (toastBox) {
+    if (toastClose) toastClose.addEventListener("click", hideToast);
+    toastBox.addEventListener("pointerenter", function () { clearTimeout(toastTimer); });
+    toastBox.addEventListener("pointerleave", function () { if (toastBox.classList.contains("show")) scheduleHide(3500); });
+    toastBox.addEventListener("focusin", function () { clearTimeout(toastTimer); });
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (menu && isMenuOpen()) {
+      var focusWasInMenu = menu.contains(document.activeElement);
+      closeMenu();
+      if (focusWasInMenu && menuButton) menuButton.focus();
+    }
+    if (toastBox && toastBox.classList.contains("show")) hideToast();
   });
 
-  navLinks.querySelectorAll('a').forEach(link => {
-    link.addEventListener('click', () => {
-      navLinks.classList.remove('active');
+  /* ------------------------------------------------------------------
+     Payments — never collect card details on this static website
+     ------------------------------------------------------------------ */
+  var contact = document.getElementById("contact");
+  var serviceSelect = document.getElementById("service");
+  // pre-select the matching service in the contact form when checkout isn't set up yet
+  var PAYMENT_SERVICE = {
+    websiteMonthly: "Website Creation", websiteYearly: "Website Creation", websiteSignup: "Website Creation",
+    socialMonthly: "Social Media", socialSetup: "Social Media",
+    adsMonthly: "Advertising",
+    bundleMonthly: "Full WAVE Package", bundleYearly: "Full WAVE Package",
+    logo: "Logo / Rebranding"
+  };
+
+  document.querySelectorAll(".pay").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var key = button.dataset.payment;
+      var url = CONFIG.payments[key];
+      if (!url) {
+        showToast("Online checkout is being set up. Please contact us to arrange payment for this service.");
+        if (serviceSelect && PAYMENT_SERVICE[key]) serviceSelect.value = PAYMENT_SERVICE[key];
+        if (contact) contact.scrollIntoView({ behavior: scrollBehavior() });
+        return;
+      }
+      var safe = safeHttpsUrl(url);
+      if (!safe) {
+        showToast("The checkout link needs to be a valid HTTPS URL.", "error");
+        return;
+      }
+      window.open(safe, "_blank", "noopener,noreferrer");
     });
   });
 
-  // --- Wave canvas animation ---
-  const canvas = document.getElementById('waveCanvas');
-  const ctx = canvas.getContext('2d');
-  let animationId;
-
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
-
-  let time = 0;
-
-  function drawWaves() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Dark gradient background
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    bgGrad.addColorStop(0, '#0c1929');
-    bgGrad.addColorStop(0.5, '#0f172a');
-    bgGrad.addColorStop(1, '#0c4a6e');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Floating particles
-    drawParticles();
-
-    // Bottom waves
-    const waves = [
-      { amplitude: 30, frequency: 0.008, speed: 0.02, y: canvas.height * 0.75, color: 'rgba(14, 165, 233, 0.08)' },
-      { amplitude: 25, frequency: 0.012, speed: 0.025, y: canvas.height * 0.8, color: 'rgba(6, 182, 212, 0.06)' },
-      { amplitude: 20, frequency: 0.015, speed: 0.03, y: canvas.height * 0.85, color: 'rgba(14, 165, 233, 0.05)' },
-      { amplitude: 35, frequency: 0.006, speed: 0.015, y: canvas.height * 0.9, color: 'rgba(6, 182, 212, 0.08)' },
-    ];
-
-    waves.forEach(wave => {
-      ctx.beginPath();
-      ctx.moveTo(0, canvas.height);
-
-      for (let x = 0; x <= canvas.width; x += 2) {
-        const y = wave.y + Math.sin(x * wave.frequency + time * wave.speed) * wave.amplitude
-          + Math.sin(x * wave.frequency * 0.5 + time * wave.speed * 1.5) * wave.amplitude * 0.5;
-        ctx.lineTo(x, y);
+  /* ------------------------------------------------------------------
+     Booking (Google Calendar appointment schedule / Calendly)
+     ------------------------------------------------------------------ */
+  var booking = document.getElementById("scheduleLink");
+  var form = document.getElementById("contactForm");
+  if (booking) {
+    var bookingHref = CONFIG.bookingUrl ? safeHttpsUrl(CONFIG.bookingUrl) : null;
+    if (bookingHref) {
+      // real link for middle-click / "open in new tab"
+      booking.href = bookingHref;
+      booking.target = "_blank";
+      booking.rel = "noopener noreferrer";
+    }
+    booking.addEventListener("click", function (e) {
+      if (!CONFIG.bookingUrl) {
+        e.preventDefault();
+        showToast("Online scheduling is being set up. Please send us a message below.");
+        if (form && window.innerWidth <= NAV_BREAKPOINT) form.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+        return;
       }
-
-      ctx.lineTo(canvas.width, canvas.height);
-      ctx.closePath();
-      ctx.fillStyle = wave.color;
-      ctx.fill();
-    });
-
-    time++;
-    animationId = requestAnimationFrame(drawWaves);
-  }
-
-  // Particles
-  const particles = [];
-  const particleCount = 50;
-
-  for (let i = 0; i < particleCount; i++) {
-    particles.push({
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
-      size: Math.random() * 2 + 0.5,
-      speedX: (Math.random() - 0.5) * 0.5,
-      speedY: (Math.random() - 0.5) * 0.3,
-      opacity: Math.random() * 0.5 + 0.1,
-    });
-  }
-
-  function drawParticles() {
-    particles.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(14, 165, 233, ${p.opacity})`;
-      ctx.fill();
-
-      p.x += p.speedX;
-      p.y += p.speedY;
-
-      if (p.x < 0) p.x = canvas.width;
-      if (p.x > canvas.width) p.x = 0;
-      if (p.y < 0) p.y = canvas.height;
-      if (p.y > canvas.height) p.y = 0;
-    });
-  }
-
-  drawWaves();
-
-  // --- Scroll reveal animations ---
-  const revealElements = document.querySelectorAll(
-    '.service-card, .portfolio-item, .rate-card, .value-item, .stat, .mission-statement, .contact-form, .contact-aside > div'
-  );
-
-  revealElements.forEach(el => el.classList.add('reveal'));
-
-  const revealObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry, index) => {
-      if (entry.isIntersecting) {
-        setTimeout(() => {
-          entry.target.classList.add('active');
-        }, index * 100);
-        revealObserver.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
-
-  revealElements.forEach(el => revealObserver.observe(el));
-
-  // --- Counter animation ---
-  const statNumbers = document.querySelectorAll('.stat-number');
-
-  const counterObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const el = entry.target;
-        const target = parseInt(el.getAttribute('data-target'));
-        animateCounter(el, target);
-        counterObserver.unobserve(el);
-      }
-    });
-  }, { threshold: 0.5 });
-
-  statNumbers.forEach(el => counterObserver.observe(el));
-
-  function animateCounter(el, target) {
-    let current = 0;
-    const increment = target / 60;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= target) {
-        el.textContent = target;
-        clearInterval(timer);
-      } else {
-        el.textContent = Math.floor(current);
-      }
-    }, 20);
-  }
-
-  // --- Contact form handling ---
-  const contactForm = document.getElementById('contactForm');
-
-  contactForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-
-    const formData = new FormData(contactForm);
-    const data = Object.fromEntries(formData);
-
-    const submitBtn = contactForm.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.textContent = 'Sending...';
-    submitBtn.disabled = true;
-
-    setTimeout(() => {
-      submitBtn.textContent = 'Message Sent!';
-      submitBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-
-      setTimeout(() => {
-        submitBtn.textContent = originalText;
-        submitBtn.style.background = '';
-        submitBtn.disabled = false;
-        contactForm.reset();
-      }, 2000);
-    }, 1000);
-  });
-
-  // --- Smooth scroll for anchor links ---
-  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', (e) => {
       e.preventDefault();
-      const target = document.querySelector(anchor.getAttribute('href'));
-      if (target) {
-        const navHeight = navbar.offsetHeight;
-        const targetPosition = target.getBoundingClientRect().top + window.scrollY - navHeight;
-        window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+      var href = safeHttpsUrl(CONFIG.bookingUrl);
+      if (!href) {
+        showToast("Booking link is invalid. Please contact us using the form.", "error");
+        return;
+      }
+      window.open(href, "_blank", "noopener,noreferrer");
+    });
+  }
+
+  /* ------------------------------------------------------------------
+     Contact form (Formspree)
+     ------------------------------------------------------------------ */
+  var formMessage = document.getElementById("formMessage");
+  var submit = document.getElementById("submitBtn");
+  var submitLabel = submit ? submit.querySelector(".btn-label") : null;
+
+  function setMessage(text, state) {
+    if (!formMessage) return;
+    formMessage.textContent = text;
+    if (state && text) formMessage.setAttribute("data-state", state);
+    else formMessage.removeAttribute("data-state");
+  }
+  function setSending(sending) {
+    if (!submit) return;
+    submit.disabled = sending;
+    submit.classList.toggle("is-sending", sending);
+    submit.setAttribute("aria-busy", String(sending));
+    if (submitLabel) submitLabel.textContent = sending ? "Sending…" : "Send Inquiry";
+  }
+
+  if (form) {
+    var fields = form.querySelectorAll("input,select,textarea");
+    var markField = function (field) {
+      field.classList.add("touched");
+      // validity.valid (not checkValidity) so no extra "invalid" events are fired
+      if (field.willValidate) field.setAttribute("aria-invalid", String(!field.validity.valid));
+    };
+    fields.forEach(function (field) {
+      field.addEventListener("blur", function () { if (field.value !== "" || field.classList.contains("touched")) markField(field); });
+      field.addEventListener("input", function () { if (field.classList.contains("touched")) markField(field); });
+      // fired by the browser's own validation (reportValidity / native submit)
+      field.addEventListener("invalid", function () { markField(field); });
+    });
+
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
+      if (!CONFIG.formspreeEndpoint) {
+        setMessage("The contact form is not connected yet. Please configure the Formspree endpoint before accepting inquiries.", "info");
+        return;
+      }
+      var endpoint = safeHttpsUrl(CONFIG.formspreeEndpoint);
+      if (!endpoint) {
+        setMessage("Message could not be delivered. Please try again later.", "error");
+        return;
+      }
+      setSending(true);
+      setMessage("");
+      try {
+        var response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Accept": "application/json" },
+          body: new FormData(form)
+        });
+        if (!response.ok) throw new Error("Delivery failed");
+        setMessage("Thank you! Your inquiry was sent successfully.", "success");
+        form.reset();
+        fields.forEach(function (field) { field.classList.remove("touched"); field.removeAttribute("aria-invalid"); });
+      } catch (err) {
+        setMessage("Message could not be delivered. Please try again later.", "error");
+      } finally {
+        setSending(false);
       }
     });
-  });
+  }
 
-  // --- Active nav link highlighting ---
-  const sections = document.querySelectorAll('.section, .hero');
-  const navAnchors = document.querySelectorAll('.nav-links a:not(.nav-cta)');
-
-  window.addEventListener('scroll', () => {
-    let current = '';
-    sections.forEach(section => {
-      const sectionTop = section.offsetTop - 100;
-      if (window.scrollY >= sectionTop) {
-        current = section.getAttribute('id');
+  /* ------------------------------------------------------------------
+     Scroll reveal — content stays visible if this never runs
+     ------------------------------------------------------------------ */
+  if (!reducedMotion() && document.querySelectorAll) {
+    var pending = [];
+    var revealFrame = 0;
+    var reveal = function (el) {
+      el.classList.add("is-visible");
+      // hand the element back to its own hover/transition styles afterwards
+      setTimeout(function () {
+        el.classList.remove("reveal", "is-visible");
+        el.style.removeProperty("--rd");
+      }, 1100);
+    };
+    // Reveal everything whose top has reached the lower part of the viewport, including
+    // anything scrolled past quickly (e.g. a jump to #contact), so nothing stays hidden.
+    var checkReveals = function () {
+      revealFrame = 0;
+      var limit = (window.innerHeight || document.documentElement.clientHeight) * 0.9;
+      pending = pending.filter(function (el) {
+        if (el.getBoundingClientRect().top < limit) { if (revealIO) revealIO.unobserve(el); reveal(el); return false; }
+        return true;
+      });
+      if (!pending.length) {
+        window.removeEventListener("scroll", queueReveal);
+        window.removeEventListener("resize", queueReveal);
       }
-    });
+    };
+    var queueReveal = function () { if (!revealFrame) revealFrame = requestAnimationFrame(checkReveals); };
+    // primary trigger: IntersectionObserver; the scroll check above is the safety net
+    var revealIO = "IntersectionObserver" in window ? new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        revealIO.unobserve(entry.target);
+        var i = pending.indexOf(entry.target);
+        if (i > -1) { pending.splice(i, 1); reveal(entry.target); }
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0 }) : null;
 
-    navAnchors.forEach(link => {
-      link.classList.remove('active');
-      if (link.getAttribute('href') === `#${current}`) {
-        link.classList.add('active');
-      }
+    var viewH = window.innerHeight || document.documentElement.clientHeight;
+    document.querySelectorAll("[data-reveal]").forEach(function (el) {
+      // anything already on screen stays as-is (no flash)
+      if (el.getBoundingClientRect().top < viewH * 0.9) return;
+      var siblings = el.parentElement ? Array.prototype.filter.call(el.parentElement.children, function (c) { return c.hasAttribute("data-reveal"); }) : [];
+      var index = siblings.indexOf(el);
+      el.style.setProperty("--rd", (Math.max(0, index) % 4) * 0.08 + "s");
+      el.classList.add("reveal");
+      pending.push(el);
+      if (revealIO) revealIO.observe(el);
     });
-  });
+    if (pending.length) {
+      window.addEventListener("scroll", queueReveal, { passive: true });
+      window.addEventListener("resize", queueReveal, { passive: true });
+    }
+  }
 
-});
+  /* ------------------------------------------------------------------
+     Ambient animations (wave dividers, featured glow) only run on screen
+     ------------------------------------------------------------------ */
+  if ("IntersectionObserver" in window) {
+    var ambientIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { entry.target.classList.toggle("in-view", entry.isIntersecting); });
+    }, { rootMargin: "80px 0px" });
+    document.querySelectorAll(".wave-divider,.price-card.featured").forEach(function (el) { ambientIO.observe(el); });
+  }
+
+  /* ------------------------------------------------------------------
+     Active nav link for the section in view
+     ------------------------------------------------------------------ */
+  if ("IntersectionObserver" in window && menu) {
+    var navLinks = Array.prototype.filter.call(menu.querySelectorAll('a[href^="#"]'), function (a) { return !a.classList.contains("nav-cta"); });
+    var setActive = function (id) {
+      navLinks.forEach(function (a) {
+        if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "true");
+        else a.removeAttribute("aria-current");
+      });
+    };
+    var sectionIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) setActive(entry.target.id); });
+    }, { rootMargin: "-42% 0px -56% 0px", threshold: 0 });
+    document.querySelectorAll("main section[id]").forEach(function (section) { sectionIO.observe(section); });
+  }
+})();
