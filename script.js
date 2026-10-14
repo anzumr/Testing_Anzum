@@ -256,38 +256,122 @@ const CONFIG = {
   var toastBox = document.getElementById("toastBox");
   var toastMsg = document.getElementById("toast");
   var toastClose = document.getElementById("toastClose");
-  var toastTimer = 0, toastShowTimer = 0;
+  var mainEl = document.getElementById("main");
+  var toastTimer = 0, toastShowTimer = 0, toastSettleTimer = 0;
+  var toastTrigger = null; // the control that raised the current notice
+
+  function toastShown() { return !!toastBox && toastBox.classList.contains("show"); }
+
+  // Where the toast sits: its usual spot (under the header) or, when that would cover the control
+  // that raised it, the focused element or a button / form field, the other edge of the screen.
+  function overlapArea(a, b) {
+    var w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    var h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    return w > 0 && h > 0 ? w * h : 0;
+  }
+  // the toast's box at one spot, without its slide-in offset (a shown toast has no transform)
+  function toastRectAt(alt) {
+    toastBox.classList.toggle("toast-alt", alt);
+    var r = toastBox.getBoundingClientRect();
+    var dx = 0, dy = 0;
+    try {
+      var m = new DOMMatrixReadOnly(getComputedStyle(toastBox).transform);
+      dx = m.m41; dy = m.m42;
+    } catch (err) { /* no DOMMatrix: the offset is at most 18px */ }
+    return { left: r.left - dx, top: r.top - dy, right: r.right - dx, bottom: r.bottom - dy };
+  }
+  var CONTROLS = "input,select,textarea,button,a[href],[tabindex]:not([tabindex='-1']),[contenteditable]";
+  function toastCost(rect) {
+    var cost = 0;
+    var focused = document.activeElement;
+    if (focused === document.body || focused === document.documentElement || focused === mainEl || (focused && toastBox.contains(focused))) focused = null;
+    // the control that raised the notice and a focused control must stay clear...
+    if (toastTrigger) cost += 1000 * overlapArea(rect, toastTrigger.getBoundingClientRect());
+    if (focused) cost += (focused.matches && focused.matches(CONTROLS) ? 1000 : 1) * overlapArea(rect, focused.getBoundingClientRect());
+    // ...and, where possible, every other button and form field
+    (mainEl || document.body).querySelectorAll("input,select,textarea,button,a.btn").forEach(function (el) {
+      cost += overlapArea(rect, el.getBoundingClientRect());
+    });
+    return cost;
+  }
+  // scrolls the page so that `el` sits just below the notice (box: the notice's box, if any)
+  function scrollJustBelow(el, box) {
+    var limit = box ? box.bottom : (header ? header.getBoundingClientRect().bottom : 0);
+    var top = Math.max(0, window.scrollY + el.getBoundingClientRect().top - (limit + 14));
+    try { window.scrollTo({ top: top, behavior: scrollBehavior() }); } catch (err) { window.scrollTo(0, top); }
+  }
+  // measure = false: the usual spot (the page is about to scroll; it is checked again once it stops)
+  function placeToast(measure) {
+    if (!toastBox) return;
+    var shown = toastShown();
+    var wasAlt = toastBox.classList.contains("toast-alt");
+    var useAlt = false;
+    // a hidden toast is placed without its slide, so it then slides in from the right edge
+    // (a shown one has no transform at either spot, and top / bottom are not animated)
+    if (!shown) toastBox.style.transition = "none";
+    if (measure) {
+      var usual = toastCost(toastRectAt(false));
+      var other = usual ? toastCost(toastRectAt(true)) : 0;
+      // ties keep the current spot, so the notice never hops for nothing
+      useAlt = usual > 0 && (wasAlt ? other <= usual : other < usual);
+    }
+    toastBox.classList.toggle("toast-alt", useAlt);
+    if (!shown) {
+      void toastBox.offsetWidth; // apply the spot before the transition comes back
+      toastBox.style.transition = "";
+    }
+  }
+  // checked again once scrolling / resizing has stopped
+  function settleToast() {
+    clearTimeout(toastSettleTimer);
+    toastSettleTimer = setTimeout(function () { if (toastShown()) placeToast(true); }, 160);
+  }
 
   function hideToast() {
     if (!toastBox) return;
     clearTimeout(toastTimer);
+    clearTimeout(toastSettleTimer);
     toastBox.classList.remove("show");
     if (toastClose) toastClose.hidden = true;
+    toastTrigger = null;
     toastTimer = setTimeout(function () { toastMsg.textContent = ""; }, 400);
   }
   function scheduleHide(ms) {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(hideToast, ms);
   }
-  function showToast(message, tone) {
-    if (!toastBox || !toastMsg) return;
+  // opts.trigger: the control that raised the notice (it is never covered)
+  // opts.onShow(box): runs once the notice is in place, with its box, to scroll the page; the
+  //   notice then takes its usual spot and is checked again once the page has settled
+  function showToast(message, tone, opts) {
+    opts = opts || {};
+    if (!toastBox || !toastMsg) { if (opts.onShow) opts.onShow(null); return; }
     clearTimeout(toastTimer);
     clearTimeout(toastShowTimer);
     toastBox.setAttribute("data-tone", tone || "info");
     toastMsg.textContent = "";
     // a short delay lets assistive tech register the change even for a repeated message
     toastShowTimer = setTimeout(function () {
+      toastTrigger = opts.trigger || null;
       toastMsg.textContent = message;
-      toastBox.classList.add("show");
       if (toastClose) toastClose.hidden = false;
+      toastBox.classList.remove("toast-alt"); // a new notice starts from the usual spot
+      placeToast(!opts.onShow);
+      if (opts.onShow) opts.onShow(toastRectAt(toastBox.classList.contains("toast-alt")));
+      toastBox.classList.add("show");
       scheduleHide(7000);
+      settleToast();
     }, 60);
   }
   if (toastBox) {
     if (toastClose) toastClose.addEventListener("click", hideToast);
     toastBox.addEventListener("pointerenter", function () { clearTimeout(toastTimer); });
-    toastBox.addEventListener("pointerleave", function () { if (toastBox.classList.contains("show")) scheduleHide(3500); });
+    toastBox.addEventListener("pointerleave", function () { if (toastShown()) scheduleHide(3500); });
     toastBox.addEventListener("focusin", function () { clearTimeout(toastTimer); });
+    window.addEventListener("scroll", function () { if (toastShown()) settleToast(); }, { passive: true });
+    window.addEventListener("resize", function () { if (toastShown()) settleToast(); }, { passive: true });
+    // keyboard focus moving under the notice moves the notice
+    document.addEventListener("focusin", function (e) { if (toastShown() && !toastBox.contains(e.target)) placeToast(true); });
   }
 
   document.addEventListener("keydown", function (e) {
@@ -323,16 +407,20 @@ const CONFIG = {
       var key = button.getAttribute("data-payment");
       var link = Object.prototype.hasOwnProperty.call(paymentLinks, key) ? paymentLinks[key] : "";
       if (isBlank(link)) {
-        showToast("Online checkout is being set up. Please contact us to arrange payment for this service.");
         if (serviceSelect && PAYMENT_SERVICE[key]) serviceSelect.value = PAYMENT_SERVICE[key];
-        if (contact) contact.scrollIntoView({ behavior: scrollBehavior() });
+        // go to the contact section, its heading landing just below the notice (not under it)
+        var contactStart = contact ? contact.querySelector(".eyebrow") || contact : null;
+        showToast("Online checkout is being set up. Please contact us to arrange payment for this service.", "info", {
+          trigger: button,
+          onShow: contactStart ? function (box) { scrollJustBelow(contactStart, box); } : null
+        });
         // move keyboard / screen-reader focus along with the page (the heading, so no on-screen keyboard pops up)
         if (contactTitle) { try { contactTitle.focus({ preventScroll: true }); } catch (err) { contactTitle.focus(); } }
         return;
       }
       var checkout = stripeUrl(link, CHECKOUT_HOSTS);
       if (!checkout) {
-        showToast("The checkout link needs to be a valid Stripe HTTPS link.", "error");
+        showToast("The checkout link needs to be a valid Stripe HTTPS link.", "error", { trigger: button });
         if (window.console && console.warn) console.warn("WAVE Digital: CONFIG.payments." + key + " is not a https://buy.stripe.com/ or https://checkout.stripe.com/ link (or a host listed in CONFIG.stripe.extraHosts), so it was not opened.");
         return;
       }
@@ -377,12 +465,17 @@ const CONFIG = {
       if (bookingHref && (e.ctrlKey || e.metaKey || e.shiftKey)) return;
       e.preventDefault();
       if (bookingUnset) {
-        showToast("Online scheduling is being set up. Please send us a message " + formHint + ".");
-        if (form && window.innerWidth <= NAV_BREAKPOINT) form.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+        // one-column layout (form under this button): bring the form up, keeping this button in
+        // view just below the notice instead of half under it
+        var bringFormUp = form && window.innerWidth <= NAV_BREAKPOINT;
+        showToast("Online scheduling is being set up. Please send us a message " + formHint + ".", "info", {
+          trigger: booking,
+          onShow: bringFormUp ? function (box) { scrollJustBelow(booking, box); } : null
+        });
         return;
       }
       if (!bookingHref) {
-        showToast("Booking link is invalid. Please contact us " + (form ? "using the form" : formHint) + ".", "error");
+        showToast("Booking link is invalid. Please contact us " + (form ? "using the form" : formHint) + ".", "error", { trigger: booking });
         return;
       }
       openExternal(bookingHref);
