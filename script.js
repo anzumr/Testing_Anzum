@@ -1,20 +1,41 @@
-// SETUP: Replace the blank values with your real provider links.
-// Use hosted recurring-subscription links for monthly/yearly plans, not one-time checkout links.
+// SETUP: Replace the blank values with your real links (step by step in README.txt).
+// This one file is shared by index.html and thank-you.html, so every link is set here once.
+//
+// formspreeEndpoint: your Formspree form URL (https://formspree.io/f/...).
 // bookingUrl: for Google Meet consultations, paste the booking-page link of a Google Calendar
-// appointment schedule (each booking gets its own Google Meet link). A Calendly link also works.
+//   appointment schedule (each booking gets its own Google Meet link). A Calendly link also works.
+//
+// SECURITY: this site never collects card details: every payment happens on Stripe's own
+// hosted checkout page. It needs NO Stripe API keys. Never paste a secret key (sk_...) or a
+// restricted key (rk_...) into any of these files: anyone can read a website's code.
 const CONFIG = {
   formspreeEndpoint: "",
   bookingUrl: "",
+  // Paste each button's Stripe Payment Link (Stripe Dashboard > Payment Links), e.g.
+  // "https://buy.stripe.com/xxxxxxxx". Use a recurring (subscription) link for the monthly
+  // and yearly plans, and a one-time link for the signup/setup fees and the logo.
+  // Test-mode links ("https://buy.stripe.com/test_...") work too, for trying it out first.
+  // Leave a value empty ("") and that button asks the visitor to contact you instead.
   payments: {
-    websiteMonthly: "",
-    socialMonthly: "",
-    adsMonthly: "",
-    bundleMonthly: "",
-    websiteYearly: "",
-    bundleYearly: "",
-    websiteSignup: "",
-    socialSetup: "",
-    logo: ""
+    websiteMonthly: "",   // Website Creation, $100–$150/mo   (recurring, monthly)
+    socialMonthly: "",    // Social Media Maintenance, $100/mo (recurring, monthly)
+    adsMonthly: "",       // Advertising, $150/mo              (recurring, monthly)
+    bundleMonthly: "",    // Full WAVE Package, $350/mo        (recurring, monthly)
+    websiteYearly: "",    // Website Creation, $1,000/yr       (recurring, yearly)
+    bundleYearly: "",     // Full WAVE Package, $3,000/yr      (recurring, yearly)
+    websiteSignup: "",    // Website Signup, $100              (one-time)
+    socialSetup: "",      // Social Media Creation, $350       (one-time)
+    logo: ""              // Logo / Rebranding, $250           (one-time)
+  },
+  stripe: {
+    // The login link of Stripe's customer portal (Settings > Billing > Customer portal), e.g.
+    // "https://billing.stripe.com/p/login/xxxxxxxx". When it is set, a "Manage subscription"
+    // link appears in the footer and on the thank-you page so clients can update their card,
+    // download invoices or cancel. Leave it empty to hide that link.
+    customerPortalUrl: "",
+    // Only if you set up a custom checkout domain in Stripe (e.g. pay.yourdomain.com): list its
+    // host name here, like ["pay.example.com"] (no https://, no slashes). Otherwise leave [].
+    extraHosts: []
   }
 };
 
@@ -34,6 +55,61 @@ const CONFIG = {
     } catch (err) {
       return null;
     }
+  }
+
+  function isBlank(value) { return value == null || String(value).trim() === ""; }
+
+  // Stripe links are only used when they point at Stripe itself (or at the owner's own custom
+  // checkout domain listed in CONFIG.stripe.extraHosts): https only, exact host name match, no
+  // user name/password or port. Anything else (http:, javascript:, data:, look-alike hosts such
+  // as buy.stripe.com.example.net) is refused. Returns the normalised URL or null.
+  var STRIPE = CONFIG.stripe || {};
+  // a single host written as a plain string ("pay.example.com") is accepted as a one-item list
+  var rawHosts = STRIPE.extraHosts;
+  rawHosts = typeof rawHosts === "string" ? [rawHosts] : (Array.isArray(rawHosts) ? rawHosts : []);
+  // each entry is reduced to a bare host name ("https://Pay.Example.com/", "//pay.example.com" or
+  // "pay.example.com." -> "pay.example.com"); the links themselves are still matched exactly
+  var EXTRA_HOSTS = rawHosts.map(function (host) {
+    return typeof host === "string" ? host.trim().toLowerCase().replace(/^([a-z]+:)?\/\//, "").replace(/[\/?#].*$/, "").replace(/\.$/, "") : "";
+  }).filter(function (host) { return host !== ""; });
+  var CHECKOUT_HOSTS = ["buy.stripe.com", "checkout.stripe.com"].concat(EXTRA_HOSTS);
+  var PORTAL_HOSTS = ["billing.stripe.com"].concat(EXTRA_HOSTS);
+
+  function stripeUrl(value, hosts) {
+    if (typeof value !== "string") return null;
+    var parsed;
+    try { parsed = new URL(value.trim()); } catch (err) { return null; }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return null;
+    return hosts.indexOf(parsed.hostname.toLowerCase()) > -1 ? parsed.href : null;
+  }
+
+  // Opens an already-vetted https link in a new tab that gets no access to this page (noopener)
+  // and no referrer (noreferrer). If the browser blocks the new tab, the link opens in this tab.
+  // Browsers return null for every "noopener" window, whether it opened or was blocked, so null
+  // alone can't mean "blocked": when the new tab opens, this page loses focus / is hidden right
+  // away; only if it is still visible and focused a moment later was the popup blocked.
+  // A Ctrl/Cmd(/Shift)-click opens the tab in the background, so this page keeps focus even
+  // though it worked: pass the click event in and modified clicks never fall back.
+  function openExternal(url, evt) {
+    var modified = !!(evt && (evt.ctrlKey || evt.metaKey || evt.shiftKey));
+    var left = false;
+    var markLeft = function () { left = true; };
+    var stopWatching = function () {
+      window.removeEventListener("blur", markLeft);
+      window.removeEventListener("pagehide", markLeft);
+      document.removeEventListener("visibilitychange", markLeft);
+    };
+    window.addEventListener("blur", markLeft);
+    window.addEventListener("pagehide", markLeft);
+    document.addEventListener("visibilitychange", markLeft);
+    var opened = null;
+    try { opened = window.open(url, "_blank", "noopener,noreferrer"); } catch (err) { opened = null; }
+    if (opened || modified) { stopWatching(); return; }
+    setTimeout(function () {
+      stopWatching();
+      var hasFocus = typeof document.hasFocus === "function" ? document.hasFocus() : true;
+      if (!left && !document.hidden && hasFocus) window.location.assign(url);
+    }, 800);
   }
 
   /* ------------------------------------------------------------------
@@ -225,7 +301,9 @@ const CONFIG = {
   });
 
   /* ------------------------------------------------------------------
-     Payments — never collect card details on this static website
+     Payments — Stripe Payment Links (Stripe's hosted checkout).
+     Card details are never collected on this website, and no Stripe
+     secret/restricted key (sk_... / rk_...) belongs anywhere in it.
      ------------------------------------------------------------------ */
   var contact = document.getElementById("contact");
   var contactTitle = document.getElementById("contact-title");
@@ -239,11 +317,12 @@ const CONFIG = {
     logo: "Logo / Rebranding"
   };
 
+  var paymentLinks = CONFIG.payments || {};
   document.querySelectorAll(".pay").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var key = button.dataset.payment;
-      var url = CONFIG.payments[key];
-      if (!url) {
+    button.addEventListener("click", function (e) {
+      var key = button.getAttribute("data-payment");
+      var link = Object.prototype.hasOwnProperty.call(paymentLinks, key) ? paymentLinks[key] : "";
+      if (isBlank(link)) {
         showToast("Online checkout is being set up. Please contact us to arrange payment for this service.");
         if (serviceSelect && PAYMENT_SERVICE[key]) serviceSelect.value = PAYMENT_SERVICE[key];
         if (contact) contact.scrollIntoView({ behavior: scrollBehavior() });
@@ -251,13 +330,30 @@ const CONFIG = {
         if (contactTitle) { try { contactTitle.focus({ preventScroll: true }); } catch (err) { contactTitle.focus(); } }
         return;
       }
-      var safe = safeHttpsUrl(url);
-      if (!safe) {
-        showToast("The checkout link needs to be a valid HTTPS URL.", "error");
+      var checkout = stripeUrl(link, CHECKOUT_HOSTS);
+      if (!checkout) {
+        showToast("The checkout link needs to be a valid Stripe HTTPS link.", "error");
+        if (window.console && console.warn) console.warn("WAVE Digital: CONFIG.payments." + key + " is not a https://buy.stripe.com/ or https://checkout.stripe.com/ link (or a host listed in CONFIG.stripe.extraHosts), so it was not opened.");
         return;
       }
-      window.open(safe, "_blank", "noopener,noreferrer");
+      openExternal(checkout, e);
     });
+  });
+
+  /* ------------------------------------------------------------------
+     "Manage subscription" — Stripe customer portal (hidden until set)
+     ------------------------------------------------------------------ */
+  var portalUrl = isBlank(STRIPE.customerPortalUrl) ? null : stripeUrl(STRIPE.customerPortalUrl, PORTAL_HOSTS);
+  // a hint for the site owner (only shown when a link was pasted but can't be used)
+  if (!portalUrl && !isBlank(STRIPE.customerPortalUrl) && window.console && console.warn) {
+    console.warn("WAVE Digital: CONFIG.stripe.customerPortalUrl is not a https://billing.stripe.com/ link (or a host listed in CONFIG.stripe.extraHosts), so the \"Manage subscription\" link stays hidden.");
+  }
+  document.querySelectorAll("[data-portal-link]").forEach(function (link) {
+    if (!portalUrl) { link.hidden = true; return; }
+    link.href = portalUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.hidden = false;
   });
 
   /* ------------------------------------------------------------------
@@ -266,27 +362,30 @@ const CONFIG = {
   var booking = document.getElementById("scheduleLink");
   var form = document.getElementById("contactForm");
   if (booking) {
-    var bookingHref = CONFIG.bookingUrl ? safeHttpsUrl(CONFIG.bookingUrl) : null;
+    var bookingUnset = isBlank(CONFIG.bookingUrl);
+    var bookingHref = bookingUnset ? null : safeHttpsUrl(String(CONFIG.bookingUrl).trim());
     if (bookingHref) {
       // real link for middle-click / "open in new tab"
       booking.href = bookingHref;
       booking.target = "_blank";
       booking.rel = "noopener noreferrer";
     }
+    // the contact form is "below" on the home page; the thank-you page has none, so point there
+    var formHint = form ? "below" : "using the contact form on our home page";
     booking.addEventListener("click", function (e) {
-      if (!CONFIG.bookingUrl) {
-        e.preventDefault();
-        showToast("Online scheduling is being set up. Please send us a message below.");
+      // Ctrl/Cmd/Shift-click on a real link: let the browser open it natively (new / background tab)
+      if (bookingHref && (e.ctrlKey || e.metaKey || e.shiftKey)) return;
+      e.preventDefault();
+      if (bookingUnset) {
+        showToast("Online scheduling is being set up. Please send us a message " + formHint + ".");
         if (form && window.innerWidth <= NAV_BREAKPOINT) form.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
         return;
       }
-      e.preventDefault();
-      var href = safeHttpsUrl(CONFIG.bookingUrl);
-      if (!href) {
-        showToast("Booking link is invalid. Please contact us using the form.", "error");
+      if (!bookingHref) {
+        showToast("Booking link is invalid. Please contact us " + (form ? "using the form" : formHint) + ".", "error");
         return;
       }
-      window.open(href, "_blank", "noopener,noreferrer");
+      openExternal(bookingHref);
     });
   }
 
