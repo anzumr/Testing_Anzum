@@ -12,9 +12,43 @@ Upload these files together, in the same folder:
   wave-logo-sm.png      (small logo: header and footer)
   favicon.png           (browser tab icon)
   apple-touch-icon.png  (home-screen icon for phones and tablets)
+  robots.txt, sitemap.xml (help search engines find the site)
+  CNAME, .nojekyll      (GitHub Pages only: your domain name, and "serve files as they are")
   README.txt            (this file; optional to upload)
 
 The site needs no build step. You can also open index.html straight from your computer to preview it.
+
+
+THE WEBSITE ADDRESS: https://wavedigital.biz (hosted free on GitHub Pages)
+
+The site is served by GitHub Pages straight from this repository. One-time setup:
+
+1. Turn on GitHub Pages: on github.com open the repository (anzumr/Testing_Anzum) >
+   Settings > Pages. Under "Build and deployment" choose Source: "Deploy from a branch",
+   pick the branch that holds these files (claude/wave-marketing-website-2zrtX, or main if you
+   merge it there later) and the folder "/ (root)", then Save.
+2. Custom domain: on the same page, type wavedigital.biz in "Custom domain" and Save (the
+   CNAME file in this folder already holds it).
+3. DNS: where you bought wavedigital.biz, open its DNS settings, delete any existing
+   "parking" A/AAAA records for the bare domain (@) and add:
+     Type   Host/Name   Value
+     A      @           185.199.108.153
+     A      @           185.199.109.153
+     A      @           185.199.110.153
+     A      @           185.199.111.153
+     AAAA   @           2606:50c0:8000::153
+     AAAA   @           2606:50c0:8001::153
+     AAAA   @           2606:50c0:8002::153
+     AAAA   @           2606:50c0:8003::153
+     CNAME  www         anzumr.github.io
+   (www.wavedigital.biz then forwards to wavedigital.biz.)
+4. Wait for DNS to spread (minutes, sometimes up to 24-48 hours). When Settings > Pages shows
+   the DNS check as successful, tick "Enforce HTTPS" so the site always loads securely.
+5. Recommended: verify the domain in your GitHub account (your profile Settings > Pages >
+   Add a domain; GitHub gives you a TXT record to add at your registrar). This stops anyone
+   else from ever pointing their GitHub site at your domain.
+
+Every change pushed to that branch goes live within a minute or two.
 
 BEFORE GOING LIVE:
 1. Contact form: DONE. It sends to your Formspree form https://formspree.io/f/xpqkaybj
@@ -25,7 +59,7 @@ BEFORE GOING LIVE:
    a. Send one test inquiry from your live site and check it arrives in your inbox (Formspree
       may ask you to confirm the first one by email).
    b. Optional: in the form's Settings on formspree.io, restrict submissions to your website's
-      domain so nobody else can post to your form.
+      domain (wavedigital.biz) so nobody else can post to your form.
 2. Booking: DONE. "Schedule a Free Consultation" (on the home page and the thank-you page)
    opens your Calendly page https://calendly.com/anzum2225/wave (CONFIG.bookingUrl).
    For Google Meet calls, open that event type in Calendly and set its Location to Google Meet
@@ -37,11 +71,9 @@ BEFORE GOING LIVE:
 5. Confirm advertising budget is billed separately and whether bundle setup fees apply.
 6. The portfolio shows your two client projects, which link to their live sites (their previews are stylized illustrations, not screenshots; replace them with your own screenshots if desired), plus a "Your business could be next" tile that takes visitors to the contact form. Add new client projects as you complete them.
 7. Test the contact form, checkout, booking and "Manage subscription" links on your live domain before sharing.
-8. Once your domain is live, update index.html so link previews on social media show the logo:
-   a. Change the og:image and twitter:image tags to the full address of wave-logo.png (for example https://yourdomain.com/wave-logo.png).
-   b. Add these two lines inside <head>, with your real address:
-        <link rel="canonical" href="https://yourdomain.com/">
-        <meta property="og:url" content="https://yourdomain.com/">
+8. Link previews and search: DONE for wavedigital.biz. index.html's canonical, og:url,
+   og:image and twitter:image tags, robots.txt and sitemap.xml all use https://wavedigital.biz.
+   If the address ever changes, update those and the CNAME file.
 
 
 TAKING PAYMENTS WITH STRIPE
@@ -105,8 +137,8 @@ e. Setup fees ($100 website signup, $350 social media setup): either keep sellin
 
 f. In each Payment Link's "After payment" settings, choose to redirect customers to your
    website (instead of Stripe's confirmation page) and enter:
-     https://YOUR-DOMAIN/thank-you.html
-   (with your real domain). Clients then land on the site's thank-you page after paying.
+     https://wavedigital.biz/thank-you.html
+   Clients then land on the site's thank-you page after paying.
 
 g. Let clients manage their own subscriptions: in Stripe's billing settings, open Customer
    portal, activate it, and copy its login link (it starts with
