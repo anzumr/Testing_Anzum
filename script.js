@@ -229,6 +229,13 @@ const CONFIG = {
     onScroll();
   }
 
+  // while the page scrolls, decorative CSS loops that can't run on the compositor hold still
+  var rootEl = document.documentElement, scrollIdle = 0;
+  window.addEventListener("scroll", function () {
+    if (scrollIdle) clearTimeout(scrollIdle); else rootEl.classList.add("is-scrolling");
+    scrollIdle = setTimeout(function () { scrollIdle = 0; rootEl.classList.remove("is-scrolling"); }, 180);
+  }, { passive: true });
+
   /* ------------------------------------------------------------------
      Logo ripple follows the pointer
      ------------------------------------------------------------------ */

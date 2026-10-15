@@ -120,11 +120,37 @@
 
   /* ================================================================ WebGL */
   var GLSL_NOISE = [
+    'uniform sampler2D uNoise;',
     'float h21(vec2 p){ p = mod(p, 64.0); vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }',
+    // value noise from the 64x64 lattice texture (texel = h21 at its cell's four corners): one fetch
+    // instead of four hashes per call, same smoothstep weights as the hash version below
     'float vn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+    '  vec4 n = texture2D(uNoise, (mod(i, 64.0) + 0.5) / 64.0);',
+    '  return mix(mix(n.r, n.g, f.x), mix(n.b, n.a, f.x), f.y); }',
+    // full-precision hash noise, kept for the fine glints in the moon column
+    'float vnh(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);',
     '  float a = h21(i), b = h21(i + vec2(1.0, 0.0)), c = h21(i + vec2(0.0, 1.0)), d = h21(i + vec2(1.0, 1.0));',
     '  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }'
   ].join('\n');
+
+  // CPU twin of the GLSL h21 hash (float32 at each step), used to build the noise lattice texture
+  function h21cpu(x, y) {
+    var F = Math.fround, fr = function (v) { v = F(v); return F(v - Math.floor(v)); };
+    var k = F(0.1031), a = fr(F(x) * k), b = fr(F(y) * k), c = a;
+    var d = F(F(F(a * F(b + 33.33)) + F(b * F(c + 33.33))) + F(c * F(a + 33.33)));
+    a = F(a + d); b = F(b + d); c = F(c + d);
+    return fr(F(a + b) * c);
+  }
+  function noiseLattice() {
+    var hv = new Float32Array(64 * 64), px = new Uint8Array(64 * 64 * 4), x, y;
+    for (y = 0; y < 64; y++) for (x = 0; x < 64; x++) hv[y * 64 + x] = h21cpu(x, y);
+    for (y = 0; y < 64; y++) for (x = 0; x < 64; x++) {
+      var o = (y * 64 + x) * 4, x1 = (x + 1) & 63, y1 = (y + 1) & 63;
+      px[o] = Math.round(hv[y * 64 + x] * 255); px[o + 1] = Math.round(hv[y * 64 + x1] * 255);
+      px[o + 2] = Math.round(hv[y1 * 64 + x] * 255); px[o + 3] = Math.round(hv[y1 * 64 + x1] * 255);
+    }
+    return px;
+  }
 
   var VS_FULL = 'attribute vec2 aP; void main(){ gl_Position = vec4(aP, 0.0, 1.0); }';
 
@@ -204,17 +230,17 @@
     '  float gx = (u - uGlit.x) / uGlit.z;',
     '  float gm = exp(-gx * gx) * smoothstep(0.6, 1.0, depth) * smoothstep(5.0, 20.0, dd) * (1.0 - smoothstep(40.0, 210.0, dd));',
     '  if (gm > 0.004) {',
-    '    float g1 = vn(vec2(u * 0.075 + uTa.z, dd * 0.42 + uTa.w));',
-    '    float g2 = vn(vec2(u * 0.19 + uTb.x, dd * 0.9 + uTb.y));',
+    '    float g1 = vnh(vec2(u * 0.075 + uTa.z, dd * 0.42 + uTa.w));',
+    '    float g2 = vnh(vec2(u * 0.19 + uTb.x, dd * 0.9 + uTb.y));',
     '    float gl = smoothstep(0.72, 0.93, g1 * 0.7 + g2 * 0.3);',
     '    col += vec3(0.62, 0.9, 1.0) * gl * gm * uGlit.w;',
     '    col += vec3(0.16, 0.36, 0.46) * gm * uGlit.w * 0.22;',
     '  }',
     // gloss: segmented specular streak under the crest + broad sheen, gliding with the flow,
     // plus a slow travelling swell of light that runs along every band
-    '  float n1 = vn(vec2(u * 0.0042 - v6.x, seed));',
-    '  float n2 = vn(vec2(u * 0.0115 - v6.y, seed + 3.7));',
-    '  float seg = smoothstep(0.40, 0.78, n1 * 0.68 + n2 * 0.32);',
+    // (the gloss segments only show within ~20px of the crest: skip the noise deeper down)
+    '  float seg = 0.0;',
+    '  if (dd < 120.0) { float n1 = vn(vec2(u * 0.0042 - v6.x, seed)); float n2 = vn(vec2(u * 0.0115 - v6.y, seed + 3.7)); seg = smoothstep(0.40, 0.78, n1 * 0.68 + n2 * 0.32); }',
     '  float gc = (u - v6.z) / uGlossW;',
     '  float sw = exp(-gc * gc);',
     '  float lit = v1.y;',
@@ -239,7 +265,7 @@
     '  }',
     // foam lace on disturbed / breaking crests
     '  float foam = v1.x;',
-    '  if (foam > 0.01) {',
+    '  if (foam > 0.01 && dd < 12.0 + 16.0 * foam) {',
     '    float fz = 2.5 + 15.0 * foam;',
     '    float fn = vn(vec2(u * 0.17 + uTb.w, dd * 0.36 + uTc.x)) * 0.55 + vn(vec2(u * 0.45 + uTc.y, dd * 0.95 + 11.0)) * 0.45;',
     '    float fm = smoothstep(0.58 - 0.22 * foam, 0.9 - 0.2 * foam, fn) * (1.0 - smoothstep(fz * 0.2, fz, dd)) * clamp(foam * 1.3, 0.0, 1.0);',
@@ -378,6 +404,16 @@
       fxv = new Float32Array(fxQuadsMax * 4 * 10); fxViews = [];
       gl.bindBuffer(gl.ARRAY_BUFFER, buf.fv);
       gl.bufferData(gl.ARRAY_BUFFER, fxv.byteLength, gl.DYNAMIC_DRAW);
+      // the noise lattice lives on texture unit 0 for the whole life of the context (uNoise defaults to 0)
+      buf.noise = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, buf.noise);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, noiseLattice());
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       R.ok = true;
     }
 
@@ -575,6 +611,7 @@
         if (gl.isContextLost()) return;
         ['sky', 'scrim', 'water', 'fx'].forEach(function (k) { if (P[k]) gl.deleteProgram(P[k].p); });
         ['tri', 'wv', 'wi', 'fv', 'fi'].forEach(function (k) { if (buf[k]) gl.deleteBuffer(buf[k]); });
+        if (buf.noise) gl.deleteTexture(buf.noise);
       } catch (e) { /* ignore */ }
     };
 
@@ -860,6 +897,7 @@
     var broke = false;
     var dirty = true, bufDirty = true, baseMoving = false;
     var raf = 0, lastTs = 0, visible = true, debugPaused = false;
+    var lastDrawTs = 0, scrollingUntil = 0;     // frame governor (see frame())
     var perf = { acc: 0, n: 0, last: 0, warm: 0 };
     var lip = {
       active: false, alpha: 1, g: 1.5, x: new Float32Array(LS), y: new Float32Array(LS), nx: new Float32Array(LS),
@@ -1647,13 +1685,13 @@
         var qx = sxp - logoR.x - ox, qy = syp - logoR.y - ty - oy;
         var ly = sn * qx + cs * qy + oy;
         clipY[i] = cs * qx - sn * qy + ox;            // local x
-        var q = Math.round(Math.max(-logoR.h, ly));
+        var q = Math.round(Math.min(logoR.h, Math.max(0, ly)));   // the mask stays inside the logo's own box
         if (q < logoR.h) any = true;
         if (q !== clipQ[i]) { clipQ[i] = q; changed = true; }
       }
       if (!any) { setLogoClip(null); return; }
       if (!changed) return;
-      var top = Math.round(-logoR.h), str = 'polygon(' + Math.round(-logoR.w * 0.5) + 'px ' + top + 'px,' + Math.round(logoR.w * 1.5) + 'px ' + top + 'px';
+      var str = 'polygon(' + Math.round(clipY[0]) + 'px 0px,' + Math.round(clipY[NP]) + 'px 0px';
       for (i = NP; i >= 0; i--) str += ',' + Math.round(clipY[i]) + 'px ' + clipQ[i] + 'px';
       setLogoClip(str + ')');
     }
@@ -1724,13 +1762,20 @@
     function frame(ts) {
       raf = 0;
       if (!running()) { lastTs = 0; return; }
+      // Frame governor: while the page is scrolling the hero is sliding away, so the water updates at
+      // ~30 fps and the GPU is left to the scroll itself; at rest it runs at the display rate, capped at
+      // ~60-80 fps on high-refresh screens. dt still spans skipped frames, so motion speed is unchanged.
+      var scrolling = ts < scrollingUntil;
+      if (lastDrawTs && ts - lastDrawTs < (scrolling ? 25 : 10.5)) { raf = requestAnimationFrame(frame); return; }
+      lastDrawTs = ts;
       var now = ts / 1000;
       var dt = lastTs ? Math.min(Math.max(now - lastTs, 0), 0.25) : 0;
       lastTs = now;
       try {
         if (dirty) { measure(); layout(); }
-        // adaptive resolution: if frames are consistently slow, lower the buffer scale (buffer only, no re-layout)
-        if (dt > 0 && R.kind === 'gl') {
+        // adaptive resolution: if frames are consistently slow at rest, lower the buffer scale (buffer only,
+        // no re-layout); never judged while scrolling, when frames are deliberately spaced out
+        if (dt > 0 && R.kind === 'gl' && !scrolling) {
           perf.last = Math.round(dt * 1000);
           if (++perf.warm > 30) {
             perf.acc += dt; perf.n++;
@@ -1749,9 +1794,9 @@
       if (running() && !raf) raf = requestAnimationFrame(frame);
     }
     function kick() {
-      if (!raf && running()) { lastTs = 0; raf = requestAnimationFrame(frame); }
+      if (!raf && running()) { lastTs = 0; lastDrawTs = 0; raf = requestAnimationFrame(frame); }
     }
-    function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; lastTs = 0; }
+    function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; lastTs = 0; lastDrawTs = 0; }
 
     // Something broke while drawing: WebGL -> 2D sibling, 2D -> the static CSS backdrop.
     function fail() {
@@ -1831,14 +1876,16 @@
       on(window, 'resize', onResize, { passive: true });
     }
     if (window.IntersectionObserver) {
+      // stops once the hero is above the top 120px (only its dark, faded bottom under the header remains)
       io = new IntersectionObserver(function (es) {
         visible = es[es.length - 1].isIntersecting;
         if (visible) kick(); else stop();
-      }, { threshold: 0 });
+      }, { threshold: 0, rootMargin: '-120px 0px 0px 0px' });
       io.observe(host);
     }
     if (doc.fonts && doc.fonts.ready) doc.fonts.ready.then(function () { if (!destroyed) onResize(); }, noop);
     on(doc, 'visibilitychange', function () { if (doc.hidden) stop(); else kick(); });
+    on(window, 'scroll', function () { scrollingUntil = performance.now() + 160; }, { passive: true });
     if (interactive) {
       var pas = { passive: true };
       on(host, 'pointermove', guard(onMove), pas);

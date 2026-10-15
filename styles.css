@@ -59,6 +59,8 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 /* ---------- header ---------- */
 .header{position:sticky;top:0;z-index:30;background:rgba(3,13,25,.84);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.08);transition:background-color .3s,box-shadow .3s}
 .header.scrolled{background:rgba(3,13,25,.92);box-shadow:0 14px 34px -18px rgba(0,0,0,.7)}
+/* nothing is behind the header until the page scrolls, so skip the (costly, every-frame) backdrop blur */
+.header:not(.scrolled){-webkit-backdrop-filter:none;backdrop-filter:none}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:var(--header-h)}
 .brand{display:flex;align-items:center;gap:13px;min-width:0;border-radius:12px}
 .brand-text strong{display:block;font:800 17px Manrope,sans-serif;letter-spacing:.14em;white-space:nowrap}
@@ -187,12 +189,13 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 @keyframes glyphGlow{0%,100%{filter:none}40%{filter:drop-shadow(0 0 6px rgba(112,229,242,.95)) brightness(1.4)}}
 
 @media (prefers-reduced-motion:no-preference){
-  .hero-inner>*{animation:heroIn 1s var(--ease) both}
+  /* fill "backwards" (not "both"): once finished the animation lets go, so no filter layers linger */
+  .hero-inner>*{animation:heroIn 1s var(--ease) backwards}
   .hero-inner>.eyebrow{animation-delay:.12s}
   .hero-inner>h1{animation-delay:.26s}
   .hero-inner>p:not(.eyebrow){animation-delay:.46s}
   .hero-inner>.actions{animation-delay:.6s}
-  .scroll-cue{animation:cueIn 1s 1.5s both,cueBob 3.2s 2.5s ease-in-out infinite}
+  .scroll-cue{animation:cueIn 1s 1.5s backwards,cueBob 3.2s 2.5s ease-in-out infinite}
 }
 @keyframes heroIn{from{opacity:0;filter:blur(10px)}to{opacity:1;filter:none}}
 @keyframes cueIn{from{opacity:0}to{opacity:1}}
@@ -339,6 +342,8 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 @media (prefers-reduced-motion:no-preference){
   .price-card.featured{animation:featuredGlow 5s ease-in-out infinite;animation-play-state:paused}
   .price-card.featured.in-view{animation-play-state:running}
+  /* box-shadow can't animate on the compositor: hold the breath while the page scrolls */
+  .is-scrolling .price-card.featured{animation-play-state:paused}
 }
 @keyframes featuredGlow{0%,100%{box-shadow:0 0 0 1px rgba(112,229,242,.18),0 0 30px -8px rgba(112,229,242,.18)}50%{box-shadow:0 0 0 1px rgba(112,229,242,.38),0 0 46px -4px rgba(112,229,242,.34)}}
 
@@ -447,7 +452,7 @@ h3,h4{font-family:Manrope,sans-serif;letter-spacing:-.01em}
 .thanks .btn.ghost{background:rgba(3,13,25,.35)}
 @media (hover:hover){.thanks .btn.ghost:hover{background:rgba(112,229,242,.14)}}
 @media (prefers-reduced-motion:no-preference){
-  .thanks-inner>*{animation:heroIn 1s var(--ease) both}
+  .thanks-inner>*{animation:heroIn 1s var(--ease) backwards}
   .thanks-inner>.eyebrow{animation-delay:.12s}
   .thanks-inner>h1{animation-delay:.22s}
   .thanks-inner>.thanks-lead{animation-delay:.36s}
