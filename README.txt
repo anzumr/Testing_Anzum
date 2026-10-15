@@ -127,6 +127,6 @@ j. Turn on Stripe's email receipts (in Stripe's settings for customer emails, sw
 
 Until the links above are filled in, the payment and booking buttons show a short on-screen notice asking visitors to contact you instead, and the contact form explains that it is not connected yet. Card details are never collected by this website.
 
-Visitors can stop the hero animation and the other looping effects with the "Pause animation" button in the bottom-left corner of the hero; the choice is remembered in their browser. People who have "reduce motion" switched on in their device settings get a still version automatically.
+Visitors can stop the hero animation and the other looping effects with the "Pause animation" button in the bottom-left corner of the hero; the choice is remembered in their browser. The thank-you page has no looping effects (its few animations finish within five seconds), so it needs no such button. People who have "reduce motion" switched on in their device settings get a still version automatically.
 
 No payment processor or contact form account can be activated by uploading these files alone.

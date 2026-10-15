@@ -294,10 +294,13 @@ const CONFIG = {
     });
     return cost;
   }
-  // scrolls the page so that `el` sits just below the notice (box: the notice's box, if any)
+  // scrolls the page so that `el` sits just below the notice (box: the notice's box, if any);
+  // measured from the layout (offsetTop), so a scroll-reveal slide still running can't skew it
   function scrollJustBelow(el, box) {
     var limit = box ? box.bottom : (header ? header.getBoundingClientRect().bottom : 0);
-    var top = Math.max(0, window.scrollY + el.getBoundingClientRect().top - (limit + 14));
+    var docTop = 0;
+    for (var node = el; node; node = node.offsetParent) docTop += node.offsetTop;
+    var top = Math.max(0, docTop - (limit + 14));
     try { window.scrollTo({ top: top, behavior: scrollBehavior() }); } catch (err) { window.scrollTo(0, top); }
   }
   // measure = false: the usual spot (the page is about to scroll; it is checked again once it stops)
@@ -306,8 +309,8 @@ const CONFIG = {
     var shown = toastShown();
     var wasAlt = toastBox.classList.contains("toast-alt");
     var useAlt = false;
-    // a hidden toast is placed without its slide, so it then slides in from the right edge
-    // (a shown one has no transform at either spot, and top / bottom are not animated)
+    // a hidden toast is placed without its slide, so it then slides in from its own edge (top or
+    // bottom); a shown one has no transform at either spot, and top / bottom are not animated
     if (!shown) toastBox.style.transition = "none";
     if (measure) {
       var usual = toastCost(toastRectAt(false));
@@ -370,8 +373,13 @@ const CONFIG = {
     toastBox.addEventListener("focusin", function () { clearTimeout(toastTimer); });
     window.addEventListener("scroll", function () { if (toastShown()) settleToast(); }, { passive: true });
     window.addEventListener("resize", function () { if (toastShown()) settleToast(); }, { passive: true });
-    // keyboard focus moving under the notice moves the notice
-    document.addEventListener("focusin", function (e) { if (toastShown() && !toastBox.contains(e.target)) placeToast(true); });
+    // keyboard focus moving under the notice moves the notice; once focus leaves the trigger for
+    // another control, protect the focused control instead (it is protected again if focus returns)
+    document.addEventListener("focusin", function (e) {
+      if (!toastShown() || toastBox.contains(e.target)) return;
+      if (e.target !== toastTrigger && e.target.matches && e.target.matches(CONTROLS)) toastTrigger = null;
+      placeToast(true);
+    });
   }
 
   document.addEventListener("keydown", function (e) {
@@ -408,8 +416,8 @@ const CONFIG = {
       var link = Object.prototype.hasOwnProperty.call(paymentLinks, key) ? paymentLinks[key] : "";
       if (isBlank(link)) {
         if (serviceSelect && PAYMENT_SERVICE[key]) serviceSelect.value = PAYMENT_SERVICE[key];
-        // go to the contact section, its heading landing just below the notice (not under it)
-        var contactStart = contact ? contact.querySelector(".eyebrow") || contact : null;
+        // go to the contact section, its content (heading / form) starting just below the notice
+        var contactStart = contact ? contact.querySelector(".contact-grid") || contact : null;
         showToast("Online checkout is being set up. Please contact us to arrange payment for this service.", "info", {
           trigger: button,
           onShow: contactStart ? function (box) { scrollJustBelow(contactStart, box); } : null
