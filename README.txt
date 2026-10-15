@@ -50,6 +50,11 @@ The site is served by GitHub Pages straight from this repository. One-time setup
 
 Every change pushed to that branch goes live within a minute or two.
 
+Getting found on Google: add the site in Google Search Console (search.google.com/search-console,
+property type "Domain", verified with a DNS TXT record), then submit https://wavedigital.biz/sitemap.xml
+under Sitemaps and request indexing of https://wavedigital.biz/ under URL inspection. index.html
+already carries structured data (schema.org Organization + WebSite) with the name, web address and logo.
+
 BEFORE GOING LIVE:
 1. Contact form: DONE. It sends to your Formspree form https://formspree.io/f/xpqkaybj
    (CONFIG.formspreeEndpoint in script.js, and the <form> tag in index.html so it still works
