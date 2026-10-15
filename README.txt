@@ -23,7 +23,7 @@ THE WEBSITE ADDRESS: https://wavedigital.biz (hosted free on GitHub Pages)
 
 The site is served by GitHub Pages straight from this repository. One-time setup:
 
-1. Turn on GitHub Pages: on github.com open the repository (anzumr/Testing_Anzum) >
+1. Turn on GitHub Pages: on github.com open this website's repository (anzumr/WAVE-Digital) >
    Settings > Pages. Under "Build and deployment" choose Source: "Deploy from a branch",
    pick the branch that holds these files (claude/wave-marketing-website-2zrtX, or main if you
    merge it there later) and the folder "/ (root)", then Save.
