@@ -260,7 +260,7 @@
         <p class="lead">Tell us what you're building. We'll help you choose the right plan.</p>
         <a id="scheduleLink" class="btn schedule" href="#contact"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M9.5 15l2 2 3.5-3.5"/></svg><span class="btn-text">Schedule a Free Consultation <span aria-hidden="true">↗</span></span></a>
       </div>
-      <form id="contactForm" class="contact-form" data-reveal>
+      <form id="contactForm" class="contact-form" action="https://formspree.io/f/xpqkaybj" method="POST" data-reveal>
         <div class="field">
           <label for="name">Your name</label>
           <input id="name" name="name" required placeholder="Your name" autocomplete="name">
@@ -288,6 +288,9 @@
           <label for="details">Tell us about your project</label>
           <textarea id="details" name="details" required rows="5" placeholder="What would you like to accomplish?"></textarea>
         </div>
+        <input type="hidden" name="_subject" value="New inquiry from the WAVE Digital website">
+        <input type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true" style="display:none">
+
         <div id="formMessage" class="form-message" role="status" aria-live="polite"></div>
         <button id="submitBtn" class="btn primary submit" type="submit"><span class="btn-label">Send Inquiry</span> <span class="btn-arrow" aria-hidden="true">↗</span></button>
       </form>

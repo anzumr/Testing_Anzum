@@ -17,14 +17,21 @@ Upload these files together, in the same folder:
 The site needs no build step. You can also open index.html straight from your computer to preview it.
 
 BEFORE GOING LIVE:
-1. Open script.js and set CONFIG.formspreeEndpoint to your real Formspree form URL.
-   Create a form at formspree.io and paste its endpoint, which looks like https://formspree.io/f/xxxxxxxx (it must start with https://). Send one test inquiry and confirm it in Formspree's verification email.
-2. Set CONFIG.bookingUrl so the "Schedule a Free Consultation" button books a Google Meet call:
-   a. In Google Calendar, create an appointment schedule (Create > Appointment schedule).
-   b. Set your availability and meeting length, and under "Location and conferencing" keep "Google Meet video conferencing" selected so every booking gets its own Meet link.
-   c. Open the schedule's booking page, copy its link (it starts with https://calendar.app.google/ or https://calendar.google.com/), and paste it into CONFIG.bookingUrl.
-   A Calendly scheduling page link also works. The link must start with https://.
-   The same button on the thank-you page uses this link too.
+1. Contact form: DONE. It sends to your Formspree form https://formspree.io/f/xpqkaybj
+   (CONFIG.formspreeEndpoint in script.js, and the <form> tag in index.html so it still works
+   with JavaScript off; if you ever switch forms, change both). Inquiries arrive with the
+   subject "New inquiry from the WAVE Digital website", and a hidden "_gotcha" field quietly
+   drops spam bots. Once the site is live:
+   a. Send one test inquiry from your live site and check it arrives in your inbox (Formspree
+      may ask you to confirm the first one by email).
+   b. Optional: in the form's Settings on formspree.io, restrict submissions to your website's
+      domain so nobody else can post to your form.
+2. Booking: DONE. "Schedule a Free Consultation" (on the home page and the thank-you page)
+   opens your Calendly page https://calendly.com/anzum2225/wave (CONFIG.bookingUrl).
+   For Google Meet calls, open that event type in Calendly and set its Location to Google Meet
+   (Calendly asks you to connect your Google account once); every booking then gets its own
+   Meet link. A Google Calendar appointment-schedule booking page also works here instead.
+   The link must start with https://.
 3. Set up payments with Stripe: follow "TAKING PAYMENTS WITH STRIPE" below.
 4. Confirm the exact scope of the $100-$150 website plan and whether annual plans include setup fees.
 5. Confirm advertising budget is billed separately and whether bundle setup fees apply.
@@ -125,7 +132,7 @@ j. Turn on Stripe's email receipts (in Stripe's settings for customer emails, sw
    that Stripe will email it.
 
 
-Until the links above are filled in, the payment and booking buttons show a short on-screen notice asking visitors to contact you instead, and the contact form explains that it is not connected yet. Card details are never collected by this website.
+Until the Stripe links above are filled in, the payment buttons show a short on-screen notice asking visitors to contact you instead and take them to the contact form. Card details are never collected by this website.
 
 Visitors can stop the hero animation and the other looping effects with the "Pause animation" button in the bottom-left corner of the hero; the choice is remembered in their browser. The thank-you page has no looping effects (its few animations finish within five seconds), so it needs no such button. People who have "reduce motion" switched on in their device settings get a still version automatically.
 

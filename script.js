@@ -1,16 +1,17 @@
 // SETUP: Replace the blank values with your real links (step by step in README.txt).
 // This one file is shared by index.html and thank-you.html, so every link is set here once.
 //
-// formspreeEndpoint: your Formspree form URL (https://formspree.io/f/...).
-// bookingUrl: for Google Meet consultations, paste the booking-page link of a Google Calendar
-//   appointment schedule (each booking gets its own Google Meet link). A Calendly link also works.
+// formspreeEndpoint: your Formspree form URL (https://formspree.io/f/...). The <form> tag in
+//   index.html posts to the same address when JavaScript is off, so if you ever change it, change both.
+// bookingUrl: your scheduling page for "Schedule a Free Consultation": a Calendly link (set the event
+//   type's location to Google Meet) or a Google Calendar appointment-schedule booking page.
 //
 // SECURITY: this site never collects card details: every payment happens on Stripe's own
 // hosted checkout page. It needs NO Stripe API keys. Never paste a secret key (sk_...) or a
 // restricted key (rk_...) into any of these files: anyone can read a website's code.
 const CONFIG = {
-  formspreeEndpoint: "",
-  bookingUrl: "",
+  formspreeEndpoint: "https://formspree.io/f/xpqkaybj",
+  bookingUrl: "https://calendly.com/anzum2225/wave",
   // Paste each button's Stripe Payment Link (Stripe Dashboard > Payment Links), e.g.
   // "https://buy.stripe.com/xxxxxxxx". Use a recurring (subscription) link for the monthly
   // and yearly plans, and a one-time link for the signup/setup fees and the logo.
@@ -514,8 +515,24 @@ const CONFIG = {
     if (submitLabel) submitLabel.textContent = on ? "Sending…" : "Send Inquiry";
   }
 
+  // Formspree explains a rejected submission as { errors: [{ field, message }] }; returns a readable
+  // sentence (e.g. "Email should be an email.") and flags the fields it names, or "" if none.
+  async function formspreeProblem(response) {
+    var data = null;
+    try { data = await response.json(); } catch (err) { return ""; }
+    if (!data || !Array.isArray(data.errors)) return "";
+    var parts = data.errors.map(function (problem) {
+      if (!problem || !problem.message) return "";
+      var field = problem.field && form.elements[problem.field];
+      if (field && field.setAttribute) { field.classList.add("touched"); field.setAttribute("aria-invalid", "true"); }
+      var label = field && field.labels && field.labels[0] ? field.labels[0].textContent.trim() : "";
+      return (label ? label + " " : "") + problem.message;
+    }).filter(Boolean);
+    return parts.length ? parts.join("; ") + "." : "";
+  }
+
   if (form) {
-    var fields = form.querySelectorAll("input,select,textarea");
+    var fields = form.querySelectorAll("input:not([type=hidden]):not([name=_gotcha]),select,textarea");
     var markField = function (field) {
       field.classList.add("touched");
       // validity.valid (not checkValidity) so no extra "invalid" events are fired
@@ -549,7 +566,11 @@ const CONFIG = {
           headers: { "Accept": "application/json" },
           body: new FormData(form)
         });
-        if (!response.ok) throw new Error("Delivery failed");
+        if (!response.ok) {
+          var problem = await formspreeProblem(response);
+          setMessage(problem ? "Message could not be delivered. " + problem : "Message could not be delivered. Please try again later.", "error");
+          return;
+        }
         setMessage("Thank you! Your inquiry was sent successfully.", "success");
         form.reset();
         fields.forEach(function (field) { field.classList.remove("touched"); field.removeAttribute("aria-invalid"); });
